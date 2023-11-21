@@ -1,0 +1,16 @@
+# C
+*.c     text diff=cpp
+*.h     text diff=cpp
+
+# Binary files
+*.o     binary
+*.obj   binary
+*.so    binary
+*.dylib binary
+*.dll   binary
+*.a     binary
+*.lib   binary
+
+# Executables
+*.exe   binary
+*.out   binary
