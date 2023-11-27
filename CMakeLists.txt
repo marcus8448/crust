@@ -10,6 +10,16 @@ add_executable(crust main.c
         list.c
         ast.c
         ast.h
+        linkedlist.c
+        linkedlist.h
+        stack.c
+        stack.h
+        preprocess.h
+        preprocess.c
+        register.c
+        register.h
+        types.c
+        types.h
 )
 
 target_compile_definitions(crust PRIVATE _CRT_SECURE_NO_WARNINGS)

@@ -1,4 +1,4 @@
-#include "build/linkedlist.h"
+#include "linkedlist.h"
 #include <stdlib.h>
 
 #define LINKEDLIST_IMPL(name, prefix, type) \

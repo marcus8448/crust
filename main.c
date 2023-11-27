@@ -7,15 +7,14 @@
 
 #include "ast.h"
 #include "list.h"
+#include "preprocess.h"
+#include "register.h"
 #include "token.h"
 
 // strdup is fine in C23
 #ifdef _MSC_VER
 #define strdup _strdup
 #endif
-
-#define token_matches(token, token_type) if ((token)->type != token_type) { return failure(token, "Expected: "#token_type); }
-#define token_matches_ext(token, token_type, def) if ((token)->type != token_type) { return failure(token, "Expected: " def); }
 
 // https://stackoverflow.com/questions/1597007/creating-c-macro-with-and-line-token-concatenation-with-positioning-macr
 #define __preprocess_concat_internal(x, y) x ## y
@@ -36,33 +35,6 @@ char* data_copy(const FileData *data, const Token *token)
     memcpy(alloc, data->contents + token->index, token->len);
     alloc[token->len] = '\0';
     return alloc;
-}
-
-typedef struct
-{
-    const Token *failure;
-    const char *reason;
-} Result;
-
-bool successful(const Result result)
-{
-    return result.failure == NULL && result.reason == NULL;
-}
-
-Result success()
-{
-    Result success;
-    success.failure = NULL;
-    success.reason = NULL;
-    return success;
-}
-
-Result failure(const Token* failure, const char *reason)
-{
-    Result error;
-    error.failure = failure;
-    error.reason = reason;
-    return error;
 }
 
 int filedata_init(FileData *data, const char* filename)
@@ -88,10 +60,34 @@ int filedata_init(FileData *data, const char* filename)
     return 0;
 }
 
-bool tokenize(const FileData *data, TokenList *list);
-Result parse_function_declaration(const FileData *data, StrList *args, Token **token);
+Result parse_function_declaration(const FileData *data, StrList *args, const Token **token);
 bool parse_arguments(const TokenList* list, StrList *args, size_t* index, bool open);
 Result parse_root(const FileData *data, const TokenList *list, FILE* output);
+
+void print_error(const char* section, const Result result, const FileData file)
+{
+    int line = 1;
+    int lineStart = 0;
+    for (int j = 0; j < result.failure->index; j++)
+    {
+        if (j < result.failure->index && file.contents[j] == '\n')
+        {
+            lineStart = j + 1;
+            line++;
+        }
+    }
+    int lineLen = 0;
+    for (int j = lineStart; j < file.len && file.contents[j] != '\n'; j++)
+    {
+        lineLen = j - lineStart + 1;
+    }
+    printf("%s error at %s[%i:%i]\n", section, file.filename, line, result.failure->index - lineStart);
+    printf("%.*s\n"
+           "%*s%.*s\n", lineLen, file.contents + lineStart, result.failure->index - lineStart, "", result.failure->len,
+           "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+    printf("%*s'%.*s': %s\n", result.failure->index - lineStart, "", result.failure->len, file.contents + result.failure->index,
+           result.reason);
+}
 
 int main(const int argc, char** argv)
 {
@@ -110,56 +106,50 @@ int main(const int argc, char** argv)
 
     FileData *files = malloc(sizeof(FileData) * (argc - 1));
     TokenList *tokens = malloc(sizeof(TokenList) * (argc - 1));
+    StrList *strLiterals = malloc(sizeof(StrList) * (argc - 1));
 
     for (int i = 1; i < argc; i++)
     {
         filedata_init(&files[i - 1], argv[i]);
         tokens_init(&tokens[i - 1]);
+        strlist_init(&strLiterals[i - 1], 1);
     }
 
     for (int i = 0; i < argc - 1; i++)
     {
-        if (!tokenize(&files[i], &tokens[i]))
+        if (!tokenize(files[i].contents, files[i].len, &tokens[i]))
         {
-            return 3;
+            exit(3);
         }
     }
 
     FILE* output = fopen("output.asm", "wb");
     for (int i = 0; i < argc - 1; i++)
     {
-        const Token *token = tokens->head;
+        const Token *token = tokens[i].head;
         while (token != NULL)
         {
             puts(token_name(token->type));
             token = token->next;
         }
 
+        const Result result = preprocess_globals(files[i].contents, tokens[i].head, &strLiterals[i], output);
+        if (!successful(result))
+        {
+            fflush(output);
+            print_error("Preprocessing", result, files[i]);
+            exit(1);
+        }
+    }
+
+    for (int i = 0; i < argc - 1; i++)
+    {
         const Result result = parse_root(&files[i], &tokens[i], output);
         if (!successful(result))
         {
-            const FileData file = files[i];
-            int line = 0;
-            int lineStart = 0;
-            for (int j = 0; j < result.failure->index; j++)
-            {
-                if (j < result.failure->index && file.contents[j] == '\n')
-                {
-                    lineStart = j + 1;
-                    line++;
-                }
-            }
-            int lineLen = 0;
-            for (int j = lineStart; j < file.len && file.contents[j] != '\n'; j++)
-            {
-                lineLen = j - lineStart + 1;
-            }
-            printf("Syntax error at %s[%i:%i]\n", file.filename, line, result.failure->index - lineStart);
-            printf("%.*s\n"
-                   "%*s%.*s\n", lineLen, file.contents + lineStart, result.failure->index - lineStart, "", result.failure->len,
-                   "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
-            printf("%*s'%.*s': %s\n", result.failure->index - lineStart, "", result.failure->len, files[i].contents + result.failure->index,
-                result.reason);
+            fflush(output);
+            print_error("Parsing", result, files[i]);
+            exit(1);
         }
     }
     fclose(output);
@@ -168,191 +158,14 @@ int main(const int argc, char** argv)
     //fixme
     free(files);
     free(tokens);
+    free(strLiterals);
 
     return 0;
 }
 
-bool tokenize(const FileData *data, TokenList* list)
-{
-    char buffer[256];
-    unsigned char bufLen = 0;
-    bool num = false;
-    for (int i = 0; i < data->len; i++)
-    {
-        const int c = data->contents[i];
-        if (c == EOF)
-        {
-            continue;
-        }
+Result parse_scope(const FileData* data, const Token **token, Registers *registers, FILE* output);
 
-        if (isspace(c) || c == '=' || c == ',' || c == '(' || c == ')' || c == '{' || c == '}'
-            || c == '<' || c == '>' || c == '~' || c == '&' || c == '|' || c == '!'
-            || c == '+' || c == '-' || c == '/' || c == '*' || c == ';')
-        {
-            if (bufLen > 0)
-            {
-                buffer[bufLen] = '\0';
-                if (strcmp(buffer, "define") == 0)
-                {
-                    token_create(tokens_next(list), keyword_define, i - bufLen, bufLen);
-                }
-                else if (strcmp(buffer, "var") == 0)
-                {
-                    token_create(tokens_next(list), keyword_var, i - bufLen, bufLen);
-                }
-                else if (strcmp(buffer, "if") == 0)
-                {
-                    token_create(tokens_next(list), cf_if, i - bufLen, bufLen);
-                }
-                else if (strcmp(buffer, "return") == 0)
-                {
-                    token_create(tokens_next(list), cf_return, i - bufLen, bufLen);
-                }
-                else if (strcmp(buffer, "else") == 0)
-                {
-                    token_create(tokens_next(list), cf_else, i - bufLen, bufLen);
-                }
-                else
-                {
-                    if (num)
-                    {
-                        token_create(tokens_next(list), constant, i - bufLen, bufLen);
-                    }
-                    else
-                    {
-                        token_create(tokens_next(list), identifier, i - bufLen, bufLen);
-                    }
-                }
-            }
-
-            if (c == '=')
-            {
-                Token *previous = list->tail;
-                switch (previous->type)
-                {
-                case equals_assign:
-                    previous->type = compare_equals;
-                    previous->len += 1;
-                    break;
-                case greater_than:
-                    previous->type = greater_than_equal;
-                    previous->len += 1;
-                    break;
-                case less_than:
-                    previous->type = less_than_equal;
-                    previous->len += 1;
-                    break;
-                default:
-                    token_create(tokens_next(list), equals_assign, i - bufLen, bufLen);
-                    break;
-                }
-            }
-            else if (c == ',')
-            {
-                    token_create(tokens_next(list), comma, i - bufLen, bufLen);
-            }
-            else if (c == ';')
-            {
-                    token_create(tokens_next(list), semicolon, i - bufLen, bufLen);
-            }
-            else if (c == '+')
-            {
-                    token_create(tokens_next(list), op_add, i - bufLen, bufLen);
-            }
-            else if (c == '-')
-            {
-                    token_create(tokens_next(list), op_sub, i - bufLen, bufLen);
-            }
-            else if (c == '/')
-            {
-                    token_create(tokens_next(list), op_div, i - bufLen, bufLen);
-            }
-            else if (c == '*')
-            {
-                    token_create(tokens_next(list), op_mul, i - bufLen, bufLen);
-            }
-            else if (c == '&')
-            {
-                    token_create(tokens_next(list), op_and, i - bufLen, bufLen);
-            }
-            else if (c == '|')
-            {
-                    token_create(tokens_next(list), op_or, i - bufLen, bufLen);
-            }
-            else if (c == '~')
-            {
-                    token_create(tokens_next(list), op_not, i - bufLen, bufLen);
-            }
-            else if (c == '!')
-            {
-                    token_create(tokens_next(list), op_not, i - bufLen, bufLen);
-            }
-            else if (c == '<')
-            {
-                Token *previous = list->tail;
-                if (previous->type == less_than)
-                {
-                    previous->type = op_lsh;
-                    previous->len += 1;
-                } else
-                {
-                    token_create(tokens_next(list), less_than, i - bufLen, bufLen);
-                }
-            }
-            else if (c == '>')
-            {
-                Token *previous = list->tail;
-                if (previous->type == greater_than)
-                {
-                    previous->type = op_rsh;
-                    previous->len += 1;
-                } else
-                {
-                    token_create(tokens_next(list), greater_than, i - bufLen, bufLen);
-                }
-            }
-            else if (c == '(')
-            {
-                token_create(tokens_next(list), opening_paren, i - bufLen, bufLen);
-            }
-            else if (c == ')')
-            {
-                token_create(tokens_next(list), closing_paren, i - bufLen, bufLen);
-            }
-            else if (c == '{')
-            {
-                token_create(tokens_next(list), opening_curly_brace, i - bufLen, bufLen);
-            }
-            else if (c == '}')
-            {
-                token_create(tokens_next(list), closing_curly_brace, i - bufLen, bufLen);
-            }
-            bufLen = 0;
-            num = false;
-        }
-        else if ('0' <= c && c <= '9' && (bufLen == 0 || num))
-        {
-            buffer[bufLen++] = (char)c;
-            num = true;
-        }
-        else if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || ('0' <= c && c <= '9'))
-        {
-            assert(!num);
-            buffer[bufLen++] = (char)c;
-        }
-        else
-        {
-            printf("Unknown %c (%i)\n", c, c);
-            return false;
-        }
-    }
-    tokens_next(list)->type = eof;
-    return true;
-}
-
-Result parse_scope(const FileData* data, Token **token, Registers *registers, FILE* output);
-
-Result parse_function_declaration(const FileData *data, StrList* args, Token** token)
+Result parse_function_declaration(const FileData *data, StrList* args, const Token** token)
 {
     *token = (*token)->next;
     token_matches(*token, opening_paren);
@@ -375,7 +188,6 @@ Result parse_root(const FileData *data, const TokenList *list, FILE* output)
     Registers registers;
     register_init(&registers);
     const Token *token = list->head;
-    fputs(".intel_syntax noprefix\n\n", output);
     while (token != NULL)
     {
         switch (token->type)
@@ -404,13 +216,7 @@ Result parse_root(const FileData *data, const TokenList *list, FILE* output)
         case keyword_var:
             token = token->next;
             token_matches(token, identifier);
-
-            Token* next = token->next;
-            token_matches(next, equals_assign);
-            next = next->next;
-            token_matches(next, constant);
-
-            fprintf(output, "%.*s:\n.quad %.*s\n", token->len, data->contents + token->index, next->len, data->contents + next->index);
+            token_seek_until(token, semicolon); // already processed
             break;
         case eof:
             return success();
@@ -438,7 +244,7 @@ void call_function(char* name, const StrList *args, const Registers* registers, 
     register_pop_all(registers, output);
 }
 
-Result parse_scope(const FileData* data, Token **token, Registers *registers, FILE* output)
+Result parse_scope(const FileData* data, const Token **token, Registers *registers, FILE* output)
 {
     *token = (*token)->next;
     token_matches(*token, opening_curly_brace);
