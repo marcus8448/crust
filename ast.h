@@ -21,6 +21,11 @@ typedef struct
 
 LIST_API(Function, function, Function)
 
+void function_init(Function *function);
+
+int functionlist_indexof(const FunctionList *list, const char *name);
+int varlist_indexof(const VarList *list, const char *name);
+
 typedef enum
 {
     t_add,

@@ -35,7 +35,7 @@ typedef enum
 
 Result parse_type(const char* contents, const Token **token, Type *type);
 
-Size variable_size(TypeKind kind);
+Size typekind_size(TypeKind kind);
 int size_bytes(Size size);
 const char *size_mnemonic(Size size);
 

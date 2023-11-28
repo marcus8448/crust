@@ -42,13 +42,17 @@ bool tokenize(const char *data, const size_t len, TokenList* list)
                 if (bufLen > 0)
                 {
                     buffer[bufLen] = '\0';
-                    if (strcmp(buffer, "define") == 0)
+                    if (strcmp(buffer, "fn") == 0)
                     {
-                        token_create(tokens_next(list), keyword_define, i - bufLen, bufLen);
+                        token_create(tokens_next(list), keyword_fn, i - bufLen, bufLen);
                     }
                     else if (strcmp(buffer, "var") == 0)
                     {
                         token_create(tokens_next(list), keyword_var, i - bufLen, bufLen);
+                    }
+                    else if (strcmp(buffer, "extern") == 0)
+                    {
+                        token_create(tokens_next(list), keyword_extern, i - bufLen, bufLen);
                     }
                     else if (strcmp(buffer, "if") == 0)
                     {
@@ -309,10 +313,12 @@ const char *token_name(const TokenType type)
         return "op_lsh";
     case op_rsh:
         return "op_rsh";
-    case keyword_define:
-        return "keyword_define";
+    case keyword_fn:
+        return "keyword_fn";
     case keyword_var:
         return "keyword_var";
+    case keyword_extern:
+        return "keyword_extern";
     case identifier:
         return "identifier";
     case constant:

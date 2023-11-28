@@ -16,26 +16,12 @@
 #define strdup _strdup
 #endif
 
-// https://stackoverflow.com/questions/1597007/creating-c-macro-with-and-line-token-concatenation-with-positioning-macr
-#define __preprocess_concat_internal(x, y) x ## y
-#define __preprocess_concat(x, y) __preprocess_concat_internal(x, y)
-
-#define forward_err(function) Result __preprocess_concat(result, __LINE__) = function; if (!successful(__preprocess_concat(result, __LINE__))) { return __preprocess_concat(result, __LINE__); }
-
 typedef struct
 {
     const char *filename;
     char* contents;
     size_t len;
 } FileData;
-
-char* data_copy(const FileData *data, const Token *token)
-{
-    char *alloc = malloc(token->len + 1);
-    memcpy(alloc, data->contents + token->index, token->len);
-    alloc[token->len] = '\0';
-    return alloc;
-}
 
 int filedata_init(FileData *data, const char* filename)
 {
@@ -45,6 +31,7 @@ int filedata_init(FileData *data, const char* filename)
     const long len = ftell(file);
     if (len < 0 || len > 1024 * 64)
     {
+        fclose(file);
         puts("file too large");
         return 1;
     }
@@ -60,9 +47,8 @@ int filedata_init(FileData *data, const char* filename)
     return 0;
 }
 
-Result parse_function_declaration(const FileData *data, StrList *args, const Token **token);
 bool parse_arguments(const TokenList* list, StrList *args, size_t* index, bool open);
-Result parse_root(const FileData *data, const TokenList *list, FILE* output);
+Result parse_root(const FileData *data, const TokenList *list, VarList *globals, FunctionList *functions, FILE* output);
 
 void print_error(const char* section, const Result result, const FileData file)
 {
@@ -110,7 +96,10 @@ int main(const int argc, char** argv)
 
     for (int i = 1; i < argc; i++)
     {
-        filedata_init(&files[i - 1], argv[i]);
+        if (filedata_init(&files[i - 1], argv[i]) != 0)
+        {
+            exit(-1);
+        }
         tokens_init(&tokens[i - 1]);
         strlist_init(&strLiterals[i - 1], 1);
     }
@@ -123,6 +112,11 @@ int main(const int argc, char** argv)
         }
     }
 
+    FunctionList functions;
+    VarList globals;
+    functionlist_init(&functions, 2);
+    varlist_init(&globals, 2);
+
     FILE* output = fopen("output.asm", "wb");
     for (int i = 0; i < argc - 1; i++)
     {
@@ -133,7 +127,7 @@ int main(const int argc, char** argv)
             token = token->next;
         }
 
-        const Result result = preprocess_globals(files[i].contents, tokens[i].head, &strLiterals[i], output);
+        const Result result = preprocess_globals(files[i].contents, tokens[i].head, &strLiterals[i], &globals, &functions, output);
         if (!successful(result))
         {
             fflush(output);
@@ -142,9 +136,11 @@ int main(const int argc, char** argv)
         }
     }
 
+    fputc('\n', output);
+
     for (int i = 0; i < argc - 1; i++)
     {
-        const Result result = parse_root(&files[i], &tokens[i], output);
+        const Result result = parse_root(&files[i], &tokens[i], &globals, &functions, output);
         if (!successful(result))
         {
             fflush(output);
@@ -154,7 +150,6 @@ int main(const int argc, char** argv)
     }
     fclose(output);
 
-
     //fixme
     free(files);
     free(tokens);
@@ -163,27 +158,18 @@ int main(const int argc, char** argv)
     return 0;
 }
 
-Result parse_scope(const FileData* data, const Token **token, Registers *registers, FILE* output);
-
-Result parse_function_declaration(const FileData *data, StrList* args, const Token** token)
+Result parse_function(const char *contents, const Token **token, const Function *function, const VarList *globals, const FunctionList *functions, FILE* output)
 {
-    *token = (*token)->next;
-    token_matches(*token, opening_paren);
+    StackFrame frame;
+    stackframe_init(&frame, NULL);
+    stackframe_load_arguments(&frame, function);
 
-    while ((*token = (*token)->next)->type != closing_paren)
-    {
-        if ((*token)->type == identifier)
-        {
-            strlist_add(args, data_copy(data, *token));
-        }
-
-        if ((*token = (*token)->next)->type == closing_paren) return success();
-        token_matches_ext(*token, comma, ", or )");
-    }
     return success();
 }
 
-Result parse_root(const FileData *data, const TokenList *list, FILE* output)
+Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* output);
+
+Result parse_root(const FileData *data, const TokenList *list, VarList *globals, FunctionList *functions, FILE* output)
 {
     Registers registers;
     register_init(&registers);
@@ -192,31 +178,38 @@ Result parse_root(const FileData *data, const TokenList *list, FILE* output)
     {
         switch (token->type)
         {
-        case keyword_define:
+        case keyword_fn:
             token = token->next;
             const Token* id = token;
             token_matches(id, identifier);
+            char* copy = token_copy(token, data->contents);
+            int indexof = functionlist_indexof(functions, copy);
+            free(copy);
+            assert(indexof != -1);
+            Function *function = &functions->array[indexof];
+            token_seek_until(token, opening_curly_brace);
 
-            StrList arguments;
-            strlist_init(&arguments, 2);
+            StackFrame frame;
+            stackframe_init(&frame, NULL);
 
-            forward_err(parse_function_declaration(data, &arguments, &token));
+            fprintf(output, "%.*s:\n", id->len, data->contents + id->index);
+            fputs("pushq %rbp # save frame pointer\n"
+                  "movq %rsp, %rbp # update frame pointer for this function\n", output);
 
-            fprintf(output, "%.*s", id->len, data->contents + id->index);
-            fputs(":\npush rbp # save frame pointer\n"
-                  "mov rbp, rsp # update frame pointer for this function\n", output);
-            for (int i = 0; i < arguments.len; i++)
-            {
-                fprintf(output, "pop %s # get variable %s\n", register_get_mnemonic(&registers, register_claim(&registers, arguments.array[i], s64)), arguments.array[i]);
-            }
-            parse_scope(data, &token, &registers, output);
-            fputs("pop rbp # restore frame pointer\n"
-                  "ret\n", output);
+            stackframe_load_arguments(&frame, function);
+            forward_err(parse_scope(data->contents, &token, &frame, globals, functions, output));
+
+            fputs("popq %rbp # restore frame pointer\n"
+                  "retq\n", output);
+
+            stackframe_free(&frame, output);
             break;
         case keyword_var:
             token = token->next;
             token_matches(token, identifier);
             token_seek_until(token, semicolon); // already processed
+            break;
+        case semicolon:
             break;
         case eof:
             return success();
@@ -229,7 +222,6 @@ Result parse_root(const FileData *data, const TokenList *list, FILE* output)
     abort();
 }
 
-void parse_statement(const TokenList* list, size_t* index, const Registers* registers, int reg, FILE* output);
 void call_function(char* name, const StrList *args, const Registers* registers, FILE* output);
 
 void call_function(char* name, const StrList *args, const Registers* registers, FILE* output)
@@ -244,7 +236,11 @@ void call_function(char* name, const StrList *args, const Registers* registers, 
     register_pop_all(registers, output);
 }
 
-Result parse_scope(const FileData* data, const Token **token, Registers *registers, FILE* output)
+Result invoke_function(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, Function function, FILE* file);
+
+char parse_statement(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* file);
+
+Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* output)
 {
     *token = (*token)->next;
     token_matches(*token, opening_curly_brace);
@@ -256,58 +252,62 @@ Result parse_scope(const FileData* data, const Token **token, Registers *registe
         case closing_curly_brace:
             return success();
         case keyword_var:
-            // *token = (*token)->next;
-            // token_matches(*token, identifier);
-            //
-            // switch ((*token = (*token)->next)->type)
-            // {
-            // case equals_assign:
-            //     int reg = register_claim(registers, name, s64);
-            //     parse_statement(list, index, registers, reg, output);
-            //     break;
-            // case opening_paren:
-            //     StrList args;
-            //     strlist_init(&args, 2);
-            //     if (!parse_arguments(list, &args, index, true))
-            //     {
-            //         puts("Failed to parse method arguments");
-            //         return false;
-            //     }
-            //     call_function(name, &args, registers, output);
-            //     break;
-            // default:
-            //     return failure(*token, "expected assignment or function call");
-            // }
+            {
+                Variable variable;
+                *token = (*token)->next;
+                token_matches(*token, identifier);
+                variable.name = token_copy(*token, contents);
+
+                *token = (*token)->next;
+                token_matches(*token, colon);
+
+                Type type;
+                forward_err(parse_type(contents, token, &type));
+                variable.type = type;
+
+                *token = (*token)->next;
+                if ((*token)->type == semicolon)
+                {
+                    typekind_size(type.kind);
+                    stackframe_allocate(frame, variable);
+                } else
+                {
+                    token_matches(*token, equals_assign);
+                    const char reg = parse_statement(contents, token, frame, globals, functions, output);
+                    stackframe_claim_or_copy_from(frame, variable, reg, output);
+                }
+                break;
+            }
         case identifier:
-            // char* name = token.identifier;
-            //
-            // token = list->array[(*index)++];
-            // if (equals_assign == token->type)
-            // {
-            //     int reg = register_claim(registers, name, s64);
-            //     parse_statement(list, index, registers, reg, output);
-            // } else if (token->type == opening_paren)
-            // {
-            //     StrList args;
-            //     strlist_init(&args, 2);
-            //     if (!parse_arguments(list, &args, index, true))
-            //     {
-            //         puts("Failed to parse method arguments");
-            //         return false;
-            //     }
-            //     call_function(name, &args, registers, output);
-            //
-            //     token = list->array[(*index)++];
-            //     if (token->type != semicolon)
-            //     {
-            //         printf("expected statment end, found %s", token_name(token->type));
-            //     }
-            // } else
-            // {
-            //     printf("Expected identifier, found %s!\n", token_name(token->type));
-            //     return false;
-            // }
-            // break;
+            char* name = token_copy(*token, contents);
+
+            *token = (*token)->next;
+
+            switch ((*token)->type)
+            {
+            case equals_assign:
+                {
+                    const char reg = parse_statement(contents, token, frame, globals, functions, output);
+                    StackAllocation* ref = stackframe_get_name(frame, name);
+                    stackframe_set_or_copy_register(frame, ref, reg, output);
+                }
+                break;
+            case opening_paren:
+                {
+                    const int indexof = functionlist_indexof(functions, name);
+                    if (indexof == -1)
+                    {
+                        return failure(*token, "unknown function");
+                    }
+                    forward_err(invoke_function(contents, token, frame, globals, functions, functions->array[indexof], output));
+                }
+                break;
+            default:
+                token_matches_ext(*token, eof, "invalid id sx");
+                break;
+            }
+            free(name);
+            break;
         case cf_if:
             // token = list->array[(*index)++];
             // if (token->type != opening_paren)
@@ -344,85 +344,56 @@ Result parse_scope(const FileData* data, const Token **token, Registers *registe
     abort();
 }
 
-// void parse_statement(const TokenList* list, size_t* index, const Registers* registers, int reg, FILE* output)
-// {
-//     Token left = {.token = eof};
-//     Token op = {.token = eof};
-//     Token token = list->array[(*index)++];
-//
-//     if (token.token == constant)
-//     {
-//         if (left.token == eof)
-//         {
-//             left = token;
-//         }
-//     } else if (token.token == identifier)
-//     {
-//         char* identifier = token.identifier;
-//         token = list->array[(*index)++];
-//         if (token.token == opening_paren)
-//         {
-//             StrList args;
-//             strlist_init(&args, 2);
-//             if (!parse_arguments(list, &args, index, true))
-//             {
-//                 printf("failed to parse args");
-//                 return;
-//             }
-//             call_function(identifier, &args, registers, output);
-//             printf("mov %s, %s", register_get_mnemonic(registers, reg), "rbx");
-//         }
-//     } else if (token.token == semicolon)
-//     {
-//         return;
-//     } else
-//     {
-//         printf("invalid ststnebt: %s\n", token_name(token->token));
-//         return;
-//     }
-// }
-//
-// bool parse_arguments(const TokenList* list, StrList *args, size_t* index, bool open)
-// {
-//     if (!open)
-//     {
-//         Token peek = list->array[(*index)++];
-//         if (peek.token != opening_paren)
-//         {
-//             printf("Expected '(', found %s!\n", token_names[peek.token]);
-//             return false;
-//         }
-//     }
-//
-//     while (*index < list->len)
-//     {
-//         Token token = list->array[(*index)++];
-//         if (token.token == closing_paren)
-//         {
-//             return true;
-//         }
-//
-//         if (token.token == identifier)
-//         {
-//             strlist_add(args, token.identifier);
-//         } else
-//         {
-//             printf("Expected identifier, found %s!\n", token_name(token->token));
-//             return false;
-//         }
-//
-//         token = list->array[(*index)++];
-//         if (token.token == closing_paren)
-//         {
-//             return true;
-//         }
-//
-//         if (token.token != comma)
-//         {
-//             printf("Expected ',' or ')', found %s!\n", token_name(token->token));
-//             return false;
-//         }
-//     }
-//     assert(false);
-//     return false;
-// }
+Result invoke_function(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, const Function function,
+                       FILE* file)
+{
+    token_matches(*token, opening_paren);
+    *token = (*token)->next;
+    for (int i = 0; i < frame->allocations.len; ++i)
+    {
+        switch (frame->allocations.array[i].reg)
+        {
+        case rax:
+        case rdi:
+        case rsi:
+        case rdx:
+        case rcx:
+        case r8:
+        case r9:
+        case r10:
+        case r11:
+            stackframe_moveto_stack(frame, &frame->allocations.array[i], file);
+            break;
+        default:
+            break;
+        }
+    }
+
+    for (int i = 0; i < function.arguments.len; i++)
+    {
+        char statement = parse_statement(contents, token, frame, globals, functions, file);
+        if (i < 6)
+        {
+
+        } else
+        {
+
+        }
+
+        if (i + 1 == function.arguments.len)
+        {
+            token_matches(*token, closing_paren);
+        } else
+        {
+            token_matches(*token, comma);
+        }
+    }
+    fprintf(file, "call %s\n", function.name);
+    return success();
+}
+
+char parse_statement(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* file)
+{
+    *token = (*token)->next;
+    return r8;
+}

@@ -1,9 +1,10 @@
 #include "list.h"
+#include <string.h>
 
 LIST_IMPL(Int, int, int)
 LIST_IMPL(Str, str, char *)
 
-int strlist_indexof_after_val(const StrList* list, const int start, const char *value)
+int strlist_indexof_after(const StrList* list, const int start, const char *value)
 {
     for (int i = start; i < list->len; i++)
     {
@@ -15,7 +16,7 @@ int strlist_indexof_after_val(const StrList* list, const int start, const char *
     return -1;
 }
 
-int strlist_indexof_val(const StrList* list, const char *value)
+int strlist_indexof(const StrList* list, const char *value)
 {
     for (int i = 0; i < list->len; i++)
     {

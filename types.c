@@ -3,9 +3,9 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-Size variable_size(const TypeKind kind)
+Size typekind_size(const TypeKind kind)
 {
-    return kind & 0b1111;
+    return kind & 0b001111;
 }
 
 int size_bytes(const Size size)
@@ -89,6 +89,9 @@ Result parse_type(const char* contents, const Token** token, Type *type)
             } else if (token_value_compare(*token, contents, "f32"))
             {
                 type->kind = f32;
+            } else
+            {
+                return failure(*token, "Unknown type");
             }
             break;
         }

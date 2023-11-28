@@ -3,9 +3,16 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#define token_seek_until(token, token_type) while ((token)->type != token_type) { token = (token)->next; if ((token)->type == eof) { token_matches(token, token_type); } }
+#define token_seek_until(token, token_type) while ((token)->next->type != token_type) { token = (token)->next; if ((token)->type == eof) { token_matches(token, token_type); } }
 #define token_matches(token, token_type) if ((token)->type != token_type) { return failure(token, "Expected: "#token_type); }
 #define token_matches_ext(token, token_type, def) if ((token)->type != token_type) { return failure(token, "Expected: " def); }
+
+// https://stackoverflow.com/questions/1597007/creating-c-macro-with-and-line-token-concatenation-with-positioning-macr
+#define __preprocess_concat_internal(x, y) x ## y
+#define __preprocess_concat(x, y) __preprocess_concat_internal(x, y)
+
+#define forward_err(function) Result __preprocess_concat(result, __LINE__) = function; if (!successful(__preprocess_concat(result, __LINE__))) { return __preprocess_concat(result, __LINE__); }
+
 
 typedef enum
 {
@@ -40,8 +47,9 @@ typedef enum
     op_lsh,
     op_rsh,
 
-    keyword_define,
+    keyword_fn,
     keyword_var,
+    keyword_extern,
 
     identifier,
     constant,
