@@ -7,32 +7,32 @@
 #include "list.h"
 #include "types.h"
 
-Result parse_function_declaration(const char* contents, const Token *&token, Function *function)
+Result parse_function_declaration(const char* contents, const Token **token, Function *function)
 {
-    token = token->next;
-    token_matches(token, identifier);
-    function->name = token_copy(token, contents);
+    *token = (*token)->next;
+    token_matches(*token, identifier);
+    function->name = token_copy(*token, contents);
 
-    token = token->next;
-    token_matches(token, opening_paren);
+    *token = (*token)->next;
+    token_matches(*token, opening_paren);
 
-    while ((token = token->next)->type != closing_paren)
+    while ((*token = (*token)->next)->type != closing_paren)
     {
-        if (token->type == identifier)
+        if ((*token)->type == identifier)
         {
             Variable argument;
-            argument.name = token_copy(token, contents);
+            argument.name = token_copy(*token, contents);
 
-            token = token->next;
-            token_matches(token, colon);
+            *token = (*token)->next;
+            token_matches(*token, colon);
 
-            forward_err(parse_type(contents, &token, &argument.type));
+            forward_err(parse_type(contents, token, &argument.type));
             varlist_add(&function->arguments, argument);
         }
 
-        token = token->next;
-        if (token->type == closing_paren) break;
-        token_matches_ext(token, comma, ", or )");
+        *token = (*token)->next;
+        if ((*token)->type == closing_paren) break;
+        token_matches_ext(*token, comma, ", or )");
     }
     return success();
 }
@@ -47,7 +47,7 @@ Result preprocess_globals(char* contents, const Token *token, StrList *strLitera
             {
                 Function function;
                 function_init(&function);
-                forward_err(parse_function_declaration(contents, token, &function));
+                forward_err(parse_function_declaration(contents, &token, &function));
 
                 if (functionlist_indexof(functions, function.name) != -1)
                 {
@@ -121,11 +121,36 @@ Result preprocess_globals(char* contents, const Token *token, StrList *strLitera
                 switch (token->type)
                 {
                 case keyword_fn:
-                    token = token->next;
-                    token_matches(token, identifier);
-
+                    {
+                        Function function;
+                        function_init(&function);
+                        forward_err(parse_function_declaration(contents, &token, &function));
+                        functionlist_add(functions, function);
+                        fprintf(output, ".extern %s\n", function.name);
+                    }
                     break;
                 case keyword_var:
+                    {
+                        Variable variable;
+                        token = token->next;
+                        token_matches(token, identifier);
+                        variable.name = token_copy(token, contents);
+
+                        if (varlist_indexof(variables, variable.name) != -1)
+                        {
+                            return failure(token, "redefinition of global variable");
+                        }
+
+                        token = token->next;
+                        token_matches(token, colon);
+
+                        Type type;
+                        forward_err(parse_type(contents, &token, &type));
+                        variable.type = type;
+
+                        varlist_add(variables, variable);
+                        fprintf(output, ".extern %s\n", variable.name);
+                    }
                     break;
                 default:
                     break;

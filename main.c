@@ -171,13 +171,15 @@ Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarLi
 
 Result parse_root(const FileData *data, const TokenList *list, VarList *globals, FunctionList *functions, FILE* output)
 {
-    Registers registers;
-    register_init(&registers);
     const Token *token = list->head;
     while (token != NULL)
     {
         switch (token->type)
         {
+        case keyword_extern:
+            token = token->next;
+            token_seek_until(token, semicolon); // already processed
+            break;
         case keyword_fn:
             token = token->next;
             const Token* id = token;
@@ -222,23 +224,9 @@ Result parse_root(const FileData *data, const TokenList *list, VarList *globals,
     abort();
 }
 
-void call_function(char* name, const StrList *args, const Registers* registers, FILE* output);
-
-void call_function(char* name, const StrList *args, const Registers* registers, FILE* output)
-{
-    register_push_all(registers, output);
-    for (int i = args->len - 1; i >= 0;--i)
-    {
-        const char* mnemonic = register_get_mnemonic_v(registers, args->array[i]);
-        fprintf(output, "push %s # push argument %s onto stack\n", mnemonic, args->array[i]);
-    }
-    fprintf(output, "call %s # call function %s\n", name, name);
-    register_pop_all(registers, output);
-}
-
 Result invoke_function(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, Function function, FILE* file);
 
-char parse_statement(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* file);
+StackAllocation *parse_statement(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* file);
 
 Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* output)
 {
@@ -392,7 +380,8 @@ Result invoke_function(const char* contents, Token** token, StackFrame* frame, V
     return success();
 }
 
-char parse_statement(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* file)
+StackAllocation* parse_statement(const char* contents, Token** token, StackFrame* frame, VarList* globals,
+                                 FunctionList* functions, FILE* file)
 {
     *token = (*token)->next;
     return r8;

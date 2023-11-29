@@ -271,7 +271,7 @@ void stackframe_moveto_stack(StackFrame* frame, StackAllocation *ref, FILE* outp
 
     if (ref->reg != -1)
     {
-        fprintf(output, "mov%c %s, %i(%%rbp)\n", get_suffix(size), get_register_mnemonic(size, ref->reg), ref->offset);
+        fprintf(output, "mov%c %s, %i(%%rbp) # store variable '%s' to stack\n", get_suffix(size), get_register_mnemonic(size, ref->reg), ref->offset, ref->variable.name);
     }
     ref->reg = -1;
 }
@@ -291,97 +291,6 @@ void stackframe_free(const StackFrame* frame, FILE* output)
     }
 }
 
-void register_init(Registers* registers)
-{
-    for (int i = 0; i < 16; ++i)
-    {
-        registers->size[i] = 0;
-        registers->registers[i] = NULL;
-    }
-    strlist_init(&registers->globals, 2);
-    intlist_init(&registers->globalSizes, 2);
-}
-
-int register_get(const Registers* registers, const char* variable)
-{
-    for (int i = 0; i < 16; ++i)
-    {
-        if (registers->size[i] != unused)
-        {
-            if (strcmp(registers->registers[i], variable) == 0)
-            {
-                return i;
-            }
-        }
-    }
-    return -1;
-}
-
-const char *register_get_mnemonic_v(const Registers* registers, const char* variable)
-{
-    for (int i = 0; i < 16; ++i)
-    {
-        if (registers->size[i] != unused && strcmp(registers->registers[i], variable) == 0)
-        {
-            switch (registers->size[i])
-            {
-            case unused:
-                break;
-            case s64:
-                return mnemonic64[i];
-            case s32:
-                return mnemonic32[i];
-            case s16:
-                return mnemonic16[i];
-            case s8:
-                return mnemonic8[i];
-            }
-        }
-    }
-    int glob = strlist_indexof(&registers->globals, variable);
-    if (glob != -1)
-    {
-        const size_t size = strlen(variable) + 5 + 1 + 4 + 6;
-        char *buf = malloc(size);
-        switch ((Size)registers->globalSizes.array[glob]) {
-        case unused:
-            break;
-        case s64:
-            snprintf(buf, size, "QWORD PTR %s[rip]", variable);
-            break;
-        case s32:
-            snprintf(buf, size, "DWORD PTR %s[rip]", variable);
-            break;
-        case s16:
-            snprintf(buf, size, "WORD PTR %s[rip]", variable);
-            break;
-        case s8:
-            snprintf(buf, size, "BYTE PTR %s[rip]", variable);
-            break;
-        }
-    }
-    return NULL;
-}
-
-const char *register_get_mnemonic(const Registers* registers, int reg)
-{
-    switch (registers->size[reg])
-    {
-    case unused:
-        break;
-    case s64:
-        return mnemonic64[reg];
-    case s32:
-        return mnemonic32[reg];
-    case s16:
-        return mnemonic16[reg];
-    case s8:
-        return mnemonic8[reg];
-    }
-
-    return NULL;
-}
-
 const char *get_register_mnemonic(const Size size, const int index)
 {
     switch (size)
@@ -399,68 +308,6 @@ const char *get_register_mnemonic(const Size size, const int index)
     }
 
     return NULL;
-}
-
-void register_release(Registers* registers, int reg)
-{
-    if (registers->size[reg] == unused)
-    {
-        printf("Tried to release unused register");
-        abort();
-    }
-    registers->registers[reg] = NULL;
-    registers->size[reg] = unused;
-}
-
-void register_release_v(Registers* registers, const char* variable)
-{
-    int reg = register_get(registers, variable);
-    if (reg == -1)
-    {
-        printf("Tried to release unused register");
-        abort();
-    }
-    register_release(registers, reg);
-}
-
-int register_claim(Registers* registers, char* variable, Size size)
-{
-    for (int i = 0; i < 16; ++i)
-    {
-        if (i == rbp || i == rsp || i == rbx) continue;
-        if (registers->size[i] == unused)
-        {
-            registers->size[i] = size;
-            registers->registers[i] = variable;
-            return i;
-        }
-    }
-    printf("out of registers");
-    abort();
-
-}
-
-void register_push_all(const Registers* registers, FILE* output)
-{
-    for (int i = 0; i < 16; ++i)
-    {
-        if (registers->size[i] != unused)
-        {
-            const char* mnemonic = mnemonic64[i];
-            fprintf(output, "push %s ; store variable %s before function call\n", mnemonic, registers->registers[i]);
-        }
-    }
-}
-
-void register_pop_all(const Registers* registers, FILE* output)
-{
-    for (int i = 15; i >= 0; --i)
-    {
-        if (registers->size[i] != unused)
-        {
-            fprintf(output, "pop %s ; restore variable %s after function call\n", mnemonic64[i], registers->registers[i]);
-        }
-    }
 }
 
 char get_suffix(const Size size)

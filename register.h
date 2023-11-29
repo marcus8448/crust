@@ -113,11 +113,6 @@ extern const char* mnemonic16[16];
 extern const char* mnemonic8[16];
 extern int argumentRegisters[6];
 
-struct RegisterHandle
-{
-    size_t id;
-};
-
 typedef struct
 {
     Variable variable;
@@ -127,15 +122,6 @@ typedef struct
 } StackAllocation;
 
 LIST_API(StackAlloc, stackalloc, StackAllocation)
-
-typedef struct
-{
-    char *registers[16];
-    Size size[16];
-
-    StrList globals;
-    IntList globalSizes;
-} Registers;
 
 typedef struct StackFrame
 {
@@ -172,15 +158,5 @@ void stackframe_moveto_register_v(StackFrame* frame, Variable variable, FILE* ou
 void stackframe_free(const StackFrame *frame, FILE* output);
 
 const char *get_register_mnemonic(Size size, int index);
-
-void register_init(Registers *registers);
-int register_get(const Registers *registers, const char *variable);
-const char *register_get_mnemonic_v(const Registers *registers, const char *variable);
-const char *register_get_mnemonic(const Registers* registers, int reg);
-void register_release(Registers *registers, int reg);
-void register_release_v(Registers *registers, const char *variable);
-int register_claim(Registers* registers, char* variable, Size size);
-void register_push_all(const Registers* registers, FILE* output);
-void register_pop_all(const Registers* registers, FILE* output);
 
 #endif //REGISTER_H
