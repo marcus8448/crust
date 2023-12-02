@@ -26,7 +26,7 @@ int size_bytes(const Size size)
     exit(5);
 }
 
-const char *size_mnemonic(const Size size)
+const char* size_mnemonic(const Size size)
 {
     switch (size)
     {
@@ -54,42 +54,49 @@ bool is_pointer(const TypeKind kind)
     return kind == ptr;
 }
 
-Result parse_type(const char* contents, const Token** token, Type *type)
+Result parse_type(const char* contents, const Token** token, Type* type)
 {
     int indirection = 0;
     while (*token != NULL)
     {
         *token = (*token)->next;
-        if ((*token)->type == opening_sqbr)
+        if ((*token)->type == token_opening_sqbr)
         {
             indirection++;
             type->kind = ptr;
             type->inner = malloc(sizeof(Type));
             type = type->inner;
-        } else
+        }
+        else
         {
-            token_matches(*token, identifier);
+            token_matches(*token, token_identifier);
             type->inner = NULL;
 
             if (token_value_compare(*token, contents, "i64"))
             {
                 type->kind = i64;
-            } else if (token_value_compare(*token, contents, "i32"))
+            }
+            else if (token_value_compare(*token, contents, "i32"))
             {
                 type->kind = i32;
-            } else if (token_value_compare(*token, contents, "i16"))
+            }
+            else if (token_value_compare(*token, contents, "i16"))
             {
                 type->kind = i16;
-            } else if (token_value_compare(*token, contents, "i8") || token_value_compare(*token, contents, "char"))
+            }
+            else if (token_value_compare(*token, contents, "i8") || token_value_compare(*token, contents, "char"))
             {
                 type->kind = i8;
-            } else if (token_value_compare(*token, contents, "f64"))
+            }
+            else if (token_value_compare(*token, contents, "f64"))
             {
                 type->kind = f64;
-            } else if (token_value_compare(*token, contents, "f32"))
+            }
+            else if (token_value_compare(*token, contents, "f32"))
             {
                 type->kind = f32;
-            } else
+            }
+            else
             {
                 return failure(*token, "Unknown type");
             }
@@ -100,7 +107,7 @@ Result parse_type(const char* contents, const Token** token, Type *type)
     while (indirection > 0)
     {
         *token = (*token)->next;
-        token_matches(*token, closing_sqbr);
+        token_matches(*token, token_closing_sqbr);
         indirection--;
     }
     return success();

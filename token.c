@@ -8,7 +8,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-bool tokenize(const char *data, const size_t len, TokenList* list)
+void token_push(Token** token, const TokenType type, const int index, const int len)
+{
+    (*token)->type = type;
+    (*token)->index = index;
+    (*token)->len = len;
+
+    if ((*token)->next == NULL)
+    {
+        (*token)->next = malloc(sizeof(Token));
+        (*token)->next->prev = *token;
+        (*token)->next->next = NULL;
+    }
+    *token = (*token)->next;
+}
+
+bool tokenize(const char* data, const size_t len, Token* head)
 {
     typedef enum
     {
@@ -24,8 +39,13 @@ bool tokenize(const char *data, const size_t len, TokenList* list)
     bool escaping = false;
     Mode mode = any;
     char last = 0;
+    Token* next = head;
+    head->prev = NULL;
+    head->next = NULL;
+
     for (int i = 0; i < len; i++)
     {
+        Token* previous = next->prev;
         const int c = data[i];
         if (c == EOF)
         {
@@ -37,169 +57,208 @@ bool tokenize(const char *data, const size_t len, TokenList* list)
         case any:
             if (isspace(c) || c == '=' || c == ',' || c == '(' || c == ')' || c == '[' || c == ']'
                 || c == '{' || c == '}' || c == '<' || c == '>' || c == '~' || c == '&' || c == '|' || c == '!'
-                || c == '+' || c == '-' || c == '/' || c == '*' || c == ';' || c == '"' || c == ':')
+                || c == '+' || c == '-' || c == '/' || c == '*' || c == ';' || c == '"' || c == ':' || c == '.')
             {
                 if (bufLen > 0)
                 {
-                    buffer[bufLen] = '\0';
-                    if (strcmp(buffer, "fn") == 0)
+                    if (strncmp(buffer, "fn", bufLen) == 0)
                     {
-                        token_create(tokens_next(list), keyword_fn, i - bufLen, bufLen);
+                        token_push(&next, token_keyword_fn, i - bufLen, bufLen);
                     }
-                    else if (strcmp(buffer, "var") == 0)
+                    else if (strncmp(buffer, "var", bufLen) == 0)
                     {
-                        token_create(tokens_next(list), keyword_var, i - bufLen, bufLen);
+                        token_push(&next, token_keyword_var, i - bufLen, bufLen);
                     }
-                    else if (strcmp(buffer, "extern") == 0)
+                    else if (strncmp(buffer, "extern", bufLen) == 0)
                     {
-                        token_create(tokens_next(list), keyword_extern, i - bufLen, bufLen);
+                        token_push(&next, token_keyword_extern, i - bufLen, bufLen);
                     }
-                    else if (strcmp(buffer, "if") == 0)
+                    else if (strncmp(buffer, "if", bufLen) == 0)
                     {
-                        token_create(tokens_next(list), cf_if, i - bufLen, bufLen);
+                        token_push(&next, token_cf_if, i - bufLen, bufLen);
                     }
-                    else if (strcmp(buffer, "return") == 0)
+                    else if (strncmp(buffer, "return", bufLen) == 0)
                     {
-                        token_create(tokens_next(list), cf_return, i - bufLen, bufLen);
+                        token_push(&next, token_cf_return, i - bufLen, bufLen);
                     }
-                    else if (strcmp(buffer, "else") == 0)
+                    else if (strncmp(buffer, "else", bufLen) == 0)
                     {
-                        token_create(tokens_next(list), cf_else, i - bufLen, bufLen);
+                        token_push(&next, token_cf_else, i - bufLen, bufLen);
                     }
                     else
                     {
                         if (numeric)
                         {
-                            token_create(tokens_next(list), constant, i - bufLen, bufLen);
+                            token_push(&next, token_constant, i - bufLen, bufLen);
                         }
                         else
                         {
-                            token_create(tokens_next(list), identifier, i - bufLen, bufLen);
+                            token_push(&next, token_identifier, i - bufLen, bufLen);
                         }
                     }
                 }
 
                 if (c == '=')
                 {
-                    Token *previous = list->tail;
-                    switch (previous->type)
+                    if (previous != NULL)
                     {
-                    case equals_assign:
-                        previous->type = compare_equals;
-                        previous->len += 1;
-                        break;
-                    case greater_than:
-                        previous->type = greater_than_equal;
-                        previous->len += 1;
-                        break;
-                    case less_than:
-                        previous->type = less_than_equal;
-                        previous->len += 1;
-                        break;
-                    default:
-                        token_create(tokens_next(list), equals_assign, i - bufLen, bufLen);
-                        break;
+                        switch (previous->type)
+                        {
+                        case token_equals_assign:
+                            previous->type = token_double_equals;
+                            previous->len += 1;
+                            break;
+                        case token_greater_than:
+                            previous->type = token_greater_than_equal;
+                            previous->len += 1;
+                            break;
+                        case token_less_than:
+                            previous->type = token_less_than_equal;
+                            previous->len += 1;
+                            break;
+                        case token_exclaimation:
+                            previous->type = token_not_equals;
+                            previous->len += 1;
+                            break;
+                        default:
+                            token_push(&next, token_equals_assign, i - bufLen, bufLen);
+                            break;
+                        }
                     }
                 }
                 else if (c == ',')
                 {
-                    token_create(tokens_next(list), comma, i - bufLen, bufLen);
+                    token_push(&next, token_comma, i - bufLen, bufLen);
                 }
                 else if (c == ';')
                 {
-                    token_create(tokens_next(list), semicolon, i - bufLen, bufLen);
+                    token_push(&next, token_semicolon, i - bufLen, bufLen);
                 }
                 else if (c == ':')
                 {
-                    token_create(tokens_next(list), colon, i - bufLen, bufLen);
+                    token_push(&next, token_colon, i - bufLen, bufLen);
                 }
                 else if (c == '+')
                 {
-                    token_create(tokens_next(list), op_add, i - bufLen, bufLen);
+                    token_push(&next, token_plus, i - bufLen, bufLen);
                 }
                 else if (c == '-')
                 {
-                    token_create(tokens_next(list), op_sub, i - bufLen, bufLen);
+                    token_push(&next, token_minus, i - bufLen, bufLen);
                 }
                 else if (c == '/')
                 {
-                    if (list->tail->type == op_div)
+                    if (previous != NULL && previous->type == token_slash)
                     {
+                        next = previous;
                         mode = comment_nl;
-                    } else
+                    }
+                    else
                     {
-                        token_create(tokens_next(list), op_div, i - bufLen, bufLen);
+                        token_push(&next, token_slash, i - bufLen, bufLen);
                     }
                 }
                 else if (c == '*')
                 {
-                    if (list->tail->type == op_div)
+                    if (previous != NULL && previous->type == token_slash)
                     {
+                        next = previous;
                         mode = comment_cl;
-                    } else {
-                        token_create(tokens_next(list), op_mul, i - bufLen, bufLen);
+                    }
+                    else
+                    {
+                        token_push(&next, token_asterik, i - bufLen, bufLen);
                     }
                 }
                 else if (c == '&')
                 {
-                    token_create(tokens_next(list), op_and, i - bufLen, bufLen);
+                    if (previous != NULL && previous->type == token_amperstand)
+                    {
+                        previous->type = token_double_amperstand;
+                        previous->len += 1;
+                    }
+                    else
+                    {
+                        token_push(&next, token_amperstand, i - bufLen, bufLen);
+                    }
                 }
                 else if (c == '|')
                 {
-                    token_create(tokens_next(list), op_or, i - bufLen, bufLen);
+                    if (previous != NULL && previous->type == token_vertical_bar)
+                    {
+                        previous->type = token_double_vertical_bar;
+                        previous->len += 1;
+                    }
+                    else
+                    {
+                        token_push(&next, token_vertical_bar, i - bufLen, bufLen);
+                    }
                 }
                 else if (c == '~')
                 {
-                    token_create(tokens_next(list), op_not, i - bufLen, bufLen);
+                    token_push(&next, token_tilde, i - bufLen, bufLen);
                 }
                 else if (c == '!')
                 {
-                    token_create(tokens_next(list), op_not, i - bufLen, bufLen);
+                    token_push(&next, token_exclaimation, i - bufLen, bufLen);
+                }
+                else if (c == '.')
+                {
+                    token_push(&next, token_period, i - bufLen, bufLen);
                 }
                 else if (c == '<')
                 {
-                    Token *previous = list->tail;
-                    if (previous->type == less_than)
+                    if (previous != NULL && previous->type == token_less_than)
                     {
-                        previous->type = op_lsh;
+                        previous->type = token_left_shift;
                         previous->len += 1;
-                    } else
+                    }
+                    else
                     {
-                        token_create(tokens_next(list), less_than, i - bufLen, bufLen);
+                        token_push(&next, token_less_than, i - bufLen, bufLen);
                     }
                 }
                 else if (c == '>')
                 {
-                    Token *previous = list->tail;
-                    if (previous->type == greater_than)
+                    if (previous != NULL)
                     {
-                        previous->type = op_rsh;
-                        previous->len += 1;
-                    } else if (previous->type == op_sub)
+                        if (previous->type == token_greater_than)
+                        {
+                            previous->type = token_right_shift;
+                            previous->len += 1;
+                        }
+                        else if (previous->type == token_minus)
+                        {
+                            previous->type = token_arrow;
+                            previous->len += 1;
+                        }
+                        else
+                        {
+                            token_push(&next, token_greater_than, i - bufLen, bufLen);
+                        }
+                    }
+                    else
                     {
-                        previous->type = arrow;
-                        previous->len += 1;
-                    } else
-                    {
-                        token_create(tokens_next(list), greater_than, i - bufLen, bufLen);
+                        token_push(&next, token_greater_than, i - bufLen, bufLen);
                     }
                 }
                 else if (c == '(')
                 {
-                    token_create(tokens_next(list), opening_paren, i - bufLen, bufLen);
+                    token_push(&next, token_opening_paren, i - bufLen, bufLen);
                 }
                 else if (c == ')')
                 {
-                    token_create(tokens_next(list), closing_paren, i - bufLen, bufLen);
+                    token_push(&next, token_closing_paren, i - bufLen, bufLen);
                 }
                 else if (c == '{')
                 {
-                    token_create(tokens_next(list), opening_curly_brace, i - bufLen, bufLen);
+                    token_push(&next, token_opening_curly_brace, i - bufLen, bufLen);
                 }
                 else if (c == '}')
                 {
-                    token_create(tokens_next(list), closing_curly_brace, i - bufLen, bufLen);
-                } else if (c == '"')
+                    token_push(&next, token_closing_curly_brace, i - bufLen, bufLen);
+                }
+                else if (c == '"')
                 {
                     mode = q_string;
                 }
@@ -241,16 +300,18 @@ bool tokenize(const char *data, const size_t len, TokenList* list)
         case q_string:
             if (c == '"' && !escaping)
             {
-                token_create(tokens_next(list), string, i - (bufLen + 1), bufLen + 2);
+                token_push(&next, token_string, i - (bufLen + 1), bufLen + 2);
                 mode = any;
                 buffer[bufLen] = '\0';
                 bufLen = 0;
-            } else
+            }
+            else
             {
                 if (c == '\\')
                 {
                     escaping = !escaping;
-                } else
+                }
+                else
                 {
                     escaping = false;
                 }
@@ -260,87 +321,99 @@ bool tokenize(const char *data, const size_t len, TokenList* list)
         }
         last = c;
     }
-    tokens_next(list)->type = eof;
+
+    next->type = token_eof;
+    next->index = len;
+    next->len = 0;
     return true;
 }
 
-const char *token_name(const TokenType type)
+const char* token_name(const TokenType type)
 {
-    switch (type) {
-    case eof:
-        return "eof";
-    case opening_paren:
-        return "opening_paren";
-    case closing_paren:
-        return "closing_paren";
-    case opening_sqbr:
-        return "opening_sqbr";
-    case closing_sqbr:
-        return "closing_sqbr";
-    case comma:
-        return "comma";
-    case opening_curly_brace:
-        return "opening_curly_brace";
-    case closing_curly_brace:
-        return "closing_curly_brace";
-    case semicolon:
-        return "semicolon";
-    case colon:
-        return "colon";
-    case op_add:
-        return "op_add";
-    case op_sub:
-        return "op_sub";
-    case op_mul:
-        return "op_mul";
-    case op_div:
-        return "op_div";
-    case op_or:
-        return "op_or";
-    case op_xor:
-        return "op_xor";
-    case op_and:
-        return "op_and";
-    case op_not:
-        return "op_not";
-    case string:
-        return "string";
+    switch (type)
+    {
+    case token_eof:
+        return "EOF";
+    case token_opening_paren:
+        return "(";
+    case token_closing_paren:
+        return ")";
+    case token_opening_sqbr:
+        return "[";
+    case token_closing_sqbr:
+        return "]";
+    case token_comma:
+        return ",";
+    case token_opening_curly_brace:
+        return "{";
+    case token_closing_curly_brace:
+        return "}";
+    case token_semicolon:
+        return ";";
+    case token_colon:
+        return ":";
+    case token_plus:
+        return "+";
+    case token_minus:
+        return "-";
+    case token_asterik:
+        return "*";
+    case token_slash:
+        return "/";
+    case token_vertical_bar:
+        return "|";
+    case token_caret:
+        return "^";
+    case token_amperstand:
+        return "&";
+    case token_tilde:
+        return "~";
+    case token_string:
+        return "<string>";
     case _:
         return "INVALID";
-    case arrow:
-        return "arrow";
-    case op_lsh:
-        return "op_lsh";
-    case op_rsh:
-        return "op_rsh";
-    case keyword_fn:
-        return "keyword_fn";
-    case keyword_var:
-        return "keyword_var";
-    case keyword_extern:
-        return "keyword_extern";
-    case identifier:
-        return "identifier";
-    case constant:
-        return "constant";
-    case compare_equals:
-        return "compare_equals";
-    case less_than:
-        return "less_than";
-    case greater_than:
-        return "greater_than";
-    case less_than_equal:
-        return "less_than_equal";
-    case greater_than_equal:
-        return "greater_than_equal";
-    case cf_if:
-        return "cf_if";
-    case cf_else:
-        return "cf_else";
-    case cf_return:
-        return "cf_return";
-    case equals_assign:
-        return "equals_assign";
+    case token_double_vertical_bar:
+        return "||";
+    case token_double_amperstand:
+        return "&&";
+    case token_period:
+        return ".";
+    case token_arrow:
+        return "->";
+    case token_left_shift:
+        return "<<";
+    case token_right_shift:
+        return ">>";
+    case token_keyword_fn:
+        return "fn";
+    case token_keyword_var:
+        return "var";
+    case token_keyword_extern:
+        return "extern";
+    case token_identifier:
+        return "<identifier>";
+    case token_constant:
+        return "<constant>";
+    case token_not_equals:
+        return "!=";
+    case token_double_equals:
+        return "==";
+    case token_less_than:
+        return "<";
+    case token_greater_than:
+        return ">";
+    case token_less_than_equal:
+        return "<=";
+    case token_greater_than_equal:
+        return ">=";
+    case token_cf_if:
+        return "if";
+    case token_cf_else:
+        return "else";
+    case token_cf_return:
+        return "return";
+    case token_equals_assign:
+        return "=";
     }
     // unreachable
     puts("INVALID TYPE??");
@@ -368,7 +441,7 @@ Result failure(const Token* failure, const char* reason)
     return error;
 }
 
-void token_create(Token* token, const TokenType type, const int index, const int len)
+void token_init(Token* token, const TokenType type, const int index, const int len)
 {
     token->type = type;
     token->index = index;
@@ -390,46 +463,37 @@ bool token_value_compare(const Token* token, const char* contents, const char* c
 
 char* token_copy(const Token* token, const char* contents)
 {
-    char *str = malloc(token->len + 1);
+    char* str = malloc(token->len + 1);
     memcpy(str, contents + token->index, token->len);
     str[token->len] = '\0';
     return str;
 }
 
-void tokens_init(TokenList* list)
+void token_copy_to(const Token* token, const char* contents, char* output)
 {
-    list->head = NULL;
-    list->tail = NULL;
+    memcpy(output, contents + token->index, token->len);
 }
 
-Token* tokens_next(TokenList* list)
+int token_str_cmp(const Token* token, const char* contents, const char* cmp)
 {
-    Token *token = malloc(sizeof(Token));
-    token->next = NULL;
+    return strncmp(contents + token->index, cmp, token->len);
+}
+
+void token_free(Token* token)
+{
+    if (token != NULL)
+    {
+        token_free(token->next);
+        free(token);
+    }
+}
+
+void tokens_init(Token* token)
+{
     token->index = 0;
     token->len = 0;
-    if (list->head == NULL)
-    {
-        token->prev = NULL;
-        list->head = list->tail = token;
-    } else
-    {
-        list->tail->next = token;
-        token->prev = list->tail;
-        list->tail = token;
-    }
-    return token;
+    token->next = NULL;
+    token->prev = NULL;
 }
 
-void tokens_free(TokenList* list)
-{
-    Token* token = list->head;
-    while (token != NULL)
-    {
-        Token* tok = token;
-        token = token->next;
-        free(tok);
-    }
-    list->head = NULL;
-    list->tail = NULL;
-}
+LIST_IMPL(Token, token, Token);

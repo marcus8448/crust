@@ -8,7 +8,8 @@
 
 enum RegisterFP
 {
-    xmm0 = 16, //don't overlap with normal registers
+    xmm0 = 16,
+    //don't overlap with normal registers
     xmm1,
     xmm2,
     xmm3,
@@ -113,19 +114,39 @@ extern const char* mnemonic16[16];
 extern const char* mnemonic8[16];
 extern int argumentRegisters[6];
 
+typedef enum
+{
+    ref_variable,
+    ref_temporary,
+    ref_constant
+} ValueRefType;
+
 typedef struct
 {
-    Variable variable;
-    int offset;
-    bool on_stack;
-    char reg;
-} StackAllocation;
+    ValueRefType type;
 
-LIST_API(StackAlloc, stackalloc, StackAllocation)
+    union
+    {
+        struct
+        {
+            Variable variable;
+            int offset;
+            bool on_stack;
+            char reg;
+        };
+
+        struct
+        {
+            char* repr;
+        };
+    };
+} ValueRef;
+
+LIST_API(StackAlloc, stackalloc, ValueRef)
 
 typedef struct StackFrame
 {
-    const struct StackFrame *parent;
+    const struct StackFrame* parent;
     StackAllocList allocations;
     bool activeRegisters[16];
     int curOffset;
@@ -140,23 +161,27 @@ typedef struct
 
 char get_suffix(Size size);
 
-void stackframe_init(StackFrame *frame, const StackFrame *parent);
-StackAllocation *stackframe_claim_or_copy_from(StackFrame* frame, Variable variable, char reg, FILE* output);
-StackAllocation *stackframe_allocate(StackFrame* frame, Variable variable);
-StackAllocation *stackframe_get(StackFrame* frame, Variable variable);
-StackAllocation *stackframe_get_name(StackFrame* frame, const char *name);
-StackAllocation *stackframe_get_id(StackFrame* frame, const char* contents, Token* id);
-const char *allocation_mnemonic(const StackAllocation* alloc);
-const char *stackframe_mnemonic(StackFrame* frame, Variable variable);
-char stackframe_make_register_available(StackFrame *frame, FILE* output);
-void stackframe_load_arguments(StackFrame* frame, const Function *function);
-void stackframe_moveto_register(StackFrame *frame, StackAllocation *alloc, FILE* output);
-void stackframe_set_or_copy_register(StackFrame* frame, StackAllocation* ref, char reg, FILE* output);
-void stackframe_moveto_stack(StackFrame* frame, StackAllocation *ref, FILE* output);
+void stackframe_init(StackFrame* frame, const StackFrame* parent);
+ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, Variable variable, char reg, FILE* output);
+ValueRef* stackframe_allocate(StackFrame* frame, Variable variable);
+ValueRef* stackframe_allocate_temporary(StackFrame* frame, FILE* output);
+void stackframe_allocate_temporary_from(StackFrame* frame, ValueRef** maybe_temp, FILE* output);
+void stackframe_free_ref(StackFrame* frame, ValueRef* ref);
+ValueRef* stackframe_get(StackFrame* frame, Variable variable);
+ValueRef* stackframe_get_name(StackFrame* frame, const char* name);
+ValueRef* stackframe_get_id(StackFrame* frame, const char* contents, Token* id);
+char* allocation_mnemonic(const ValueRef* alloc);
+char* stackframe_mnemonic(StackFrame* frame, Variable variable);
+char stackframe_make_register_available(StackFrame* frame, FILE* output);
+void stackframe_load_arguments(StackFrame* frame, const Function* function);
+void stackframe_moveto_register(StackFrame* frame, ValueRef* alloc, FILE* output);
+void stackframe_force_into_register(StackFrame* frame, ValueRef* alloc, char reg, FILE* output);
+void stackframe_set_or_copy_register(StackFrame* frame, ValueRef* ref, char reg, FILE* output);
+void stackframe_moveto_stack(StackFrame* frame, ValueRef* ref, FILE* output);
 
 void stackframe_moveto_register_v(StackFrame* frame, Variable variable, FILE* output);
-void stackframe_free(const StackFrame *frame, FILE* output);
+void stackframe_free(const StackFrame* frame, FILE* output);
 
-const char *get_register_mnemonic(Size size, int index);
+const char* get_register_mnemonic(Size size, int index);
 
 #endif //REGISTER_H

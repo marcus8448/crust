@@ -18,12 +18,20 @@
 
 typedef struct
 {
-    const char *filename;
+    const char* filename;
     char* contents;
     size_t len;
 } FileData;
 
-int filedata_init(FileData *data, const char* filename)
+ValueRef* simple_op(const char* contents, const char* op, StackFrame* frame, VarList* globals, FunctionList* functions,
+                    StrList* literals, AstNode* node, FILE* file);
+
+ValueRef* unarry_op(const char* contents, const char* op, StackFrame* frame, VarList* globals, FunctionList* functions, StrList* literals, AstNode* node, FILE* file);
+
+ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList* globals,
+                                FunctionList* functions, StrList *literals, AstNode* node, FILE* file);
+
+int filedata_init(FileData* data, const char* filename)
 {
     FILE* file = fopen(filename, "rb");
     if (file == NULL) return 2;
@@ -47,9 +55,6 @@ int filedata_init(FileData *data, const char* filename)
     return 0;
 }
 
-bool parse_arguments(const TokenList* list, StrList *args, size_t* index, bool open);
-Result parse_root(const FileData *data, const TokenList *list, VarList *globals, FunctionList *functions, FILE* output);
-
 void print_error(const char* section, const Result result, const FileData file)
 {
     int line = 1;
@@ -71,9 +76,13 @@ void print_error(const char* section, const Result result, const FileData file)
     printf("%.*s\n"
            "%*s%.*s\n", lineLen, file.contents + lineStart, result.failure->index - lineStart, "", result.failure->len,
            "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
-    printf("%*s'%.*s': %s\n", result.failure->index - lineStart, "", result.failure->len, file.contents + result.failure->index,
+    printf("%*s'%.*s': %s\n", result.failure->index - lineStart, "", result.failure->len,
+           file.contents + result.failure->index,
            result.reason);
 }
+
+Result parse_function(const char* contents, Function* function, VarList* globals, FunctionList* functions,
+                      StrList* str_literals, FILE* output);
 
 int main(const int argc, char** argv)
 {
@@ -90,9 +99,9 @@ int main(const int argc, char** argv)
         return 1;
     }
 
-    FileData *files = malloc(sizeof(FileData) * (argc - 1));
-    TokenList *tokens = malloc(sizeof(TokenList) * (argc - 1));
-    StrList *strLiterals = malloc(sizeof(StrList) * (argc - 1));
+    FileData* files = malloc(sizeof(FileData) * (argc - 1));
+    Token* tokens = malloc(sizeof(Token) * (argc - 1));
+    StrList* strLiterals = malloc(sizeof(StrList) * (argc - 1));
 
     for (int i = 1; i < argc; i++)
     {
@@ -100,7 +109,6 @@ int main(const int argc, char** argv)
         {
             exit(-1);
         }
-        tokens_init(&tokens[i - 1]);
         strlist_init(&strLiterals[i - 1], 1);
     }
 
@@ -120,14 +128,8 @@ int main(const int argc, char** argv)
     FILE* output = fopen("output.asm", "wb");
     for (int i = 0; i < argc - 1; i++)
     {
-        const Token *token = tokens[i].head;
-        while (token != NULL)
-        {
-            puts(token_name(token->type));
-            token = token->next;
-        }
-
-        const Result result = preprocess_globals(files[i].contents, tokens[i].head, &strLiterals[i], &globals, &functions, output);
+        const Result result = preprocess_globals(files[i].contents, &tokens[i], &strLiterals[i], &globals, &functions,
+                                                 output);
         if (!successful(result))
         {
             fflush(output);
@@ -140,12 +142,16 @@ int main(const int argc, char** argv)
 
     for (int i = 0; i < argc - 1; i++)
     {
-        const Result result = parse_root(&files[i], &tokens[i], &globals, &functions, output);
-        if (!successful(result))
+        for (int i = 0; i < functions.len; ++i)
         {
-            fflush(output);
-            print_error("Parsing", result, files[i]);
-            exit(1);
+            const Result result = parse_function(files[i].contents, &functions.array[i], &globals, &functions,
+                                                 &strLiterals[i], output);
+            if (!successful(result))
+            {
+                fflush(output);
+                print_error("Parsing", result, files[i]);
+                exit(1);
+            }
         }
     }
     fclose(output);
@@ -158,145 +164,106 @@ int main(const int argc, char** argv)
     return 0;
 }
 
-Result parse_function(const char *contents, const Token **token, const Function *function, const VarList *globals, const FunctionList *functions, FILE* output)
-{
-    StackFrame frame;
-    stackframe_init(&frame, NULL);
-    stackframe_load_arguments(&frame, function);
+Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions,
+                   StrList* literals, FILE* output);
 
+Result parse_function(const char* contents, Function* function, VarList* globals, FunctionList* functions,
+                      StrList* literals, FILE* output)
+{
+    if (function->start != NULL)
+    {
+        StackFrame frame;
+        stackframe_init(&frame, NULL);
+
+        fprintf(output, "%s:\n", function->name);
+        // fputs("pushq %rbp # save frame pointer\n"
+        //       "movq %rsp, %rbp # update frame pointer for this function\n", output);
+
+        stackframe_load_arguments(&frame, function);
+        const Token* token = function->start;
+        forward_err(parse_scope(contents, &token, &frame, globals, functions, literals, output));
+
+        // fputs("popq %rbp # restore frame pointer\n"
+        //       "retq\n", output);
+
+        stackframe_free(&frame, output);
+    }
     return success();
 }
 
-Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* output);
+Result invoke_function(const char* contents, Token** token, StackFrame* frame, VarList* globals,
+                       FunctionList* functions, Function function, FILE* file);
 
-Result parse_root(const FileData *data, const TokenList *list, VarList *globals, FunctionList *functions, FILE* output)
+Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions,
+                   StrList* literals, FILE* output)
 {
-    const Token *token = list->head;
-    while (token != NULL)
-    {
-        switch (token->type)
-        {
-        case keyword_extern:
-            token = token->next;
-            token_seek_until(token, semicolon); // already processed
-            break;
-        case keyword_fn:
-            token = token->next;
-            const Token* id = token;
-            token_matches(id, identifier);
-            char* copy = token_copy(token, data->contents);
-            int indexof = functionlist_indexof(functions, copy);
-            free(copy);
-            assert(indexof != -1);
-            Function *function = &functions->array[indexof];
-            token_seek_until(token, opening_curly_brace);
-
-            StackFrame frame;
-            stackframe_init(&frame, NULL);
-
-            fprintf(output, "%.*s:\n", id->len, data->contents + id->index);
-            fputs("pushq %rbp # save frame pointer\n"
-                  "movq %rsp, %rbp # update frame pointer for this function\n", output);
-
-            stackframe_load_arguments(&frame, function);
-            forward_err(parse_scope(data->contents, &token, &frame, globals, functions, output));
-
-            fputs("popq %rbp # restore frame pointer\n"
-                  "retq\n", output);
-
-            stackframe_free(&frame, output);
-            break;
-        case keyword_var:
-            token = token->next;
-            token_matches(token, identifier);
-            token_seek_until(token, semicolon); // already processed
-            break;
-        case semicolon:
-            break;
-        case eof:
-            return success();
-        default:
-            return failure(token, "expected global or function");
-        }
-        token = token->next;
-    }
-    // unreachable
-    abort();
-}
-
-Result invoke_function(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, Function function, FILE* file);
-
-StackAllocation *parse_statement(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* file);
-
-Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, FILE* output)
-{
-    *token = (*token)->next;
-    token_matches(*token, opening_curly_brace);
-
+    token_matches(*token, token_opening_curly_brace);
     while ((*token)->next != NULL)
     {
         switch ((*token = (*token)->next)->type)
         {
-        case closing_curly_brace:
+        case token_closing_curly_brace:
+            fputs("ret\n", output);
             return success();
-        case keyword_var:
+        case token_keyword_var:
             {
                 Variable variable;
                 *token = (*token)->next;
-                token_matches(*token, identifier);
+                token_matches(*token, token_identifier);
                 variable.name = token_copy(*token, contents);
 
                 *token = (*token)->next;
-                token_matches(*token, colon);
+                token_matches(*token, token_colon);
 
                 Type type;
                 forward_err(parse_type(contents, token, &type));
                 variable.type = type;
 
                 *token = (*token)->next;
-                if ((*token)->type == semicolon)
+                if ((*token)->type == token_semicolon)
                 {
                     typekind_size(type.kind);
                     stackframe_allocate(frame, variable);
-                } else
+                }
+                else
                 {
-                    token_matches(*token, equals_assign);
-                    const char reg = parse_statement(contents, token, frame, globals, functions, output);
-                    stackframe_claim_or_copy_from(frame, variable, reg, output);
+                    AstNode node;
+                    token_matches(*token, token_equals_assign);
+                    forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
                 }
                 break;
             }
-        case identifier:
+        case token_identifier:
             char* name = token_copy(*token, contents);
 
             *token = (*token)->next;
 
             switch ((*token)->type)
             {
-            case equals_assign:
+            case token_equals_assign:
                 {
-                    const char reg = parse_statement(contents, token, frame, globals, functions, output);
-                    StackAllocation* ref = stackframe_get_name(frame, name);
-                    stackframe_set_or_copy_register(frame, ref, reg, output);
+                    AstNode node;
+                    forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
                 }
                 break;
-            case opening_paren:
+            case token_opening_paren:
                 {
                     const int indexof = functionlist_indexof(functions, name);
                     if (indexof == -1)
                     {
                         return failure(*token, "unknown function");
                     }
-                    forward_err(invoke_function(contents, token, frame, globals, functions, functions->array[indexof], output));
+                    forward_err(
+                        invoke_function(contents, token, frame, globals, functions, functions->array[indexof], output));
                 }
                 break;
             default:
-                token_matches_ext(*token, eof, "invalid id sx");
+                token_matches_ext(*token, token_eof, "invalid id sx");
                 break;
             }
             free(name);
             break;
-        case cf_if:
+        case token_cf_if:
             // token = list->array[(*index)++];
             // if (token->type != opening_paren)
             // {
@@ -309,20 +276,20 @@ Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarLi
             //
             // register_release(registers, reg);
             break;
-        case cf_else:
+        case token_cf_else:
             // *token = (*token)->next;
             // token_matches(*token, opening_curly_brace);
 
             break;
-        case cf_return:
-            // const int reg = register_claim(registers, "@@RETURN!", s64);
-            // parse_statement(list, index, registers, reg, output);
-            // fprintf(output, "mov %s, %s # store return value in correct register\n", "rbx", register_get_mnemonic(registers, reg));
-            // fprintf(output, "pop ebp # restore frame\n"
-            //                 "ret # return\n");
-            // register_release(registers, reg);
+        case token_cf_return:
+            *token = (*token)->next;
+            AstNode node;
+            forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
+            ValueRef* ref = solve_node_allocation(contents, frame, globals, functions, literals, &node, output);
+            stackframe_force_into_register(frame, ref, rax, output);
+            fputs("ret\n", output);
             break;
-        case semicolon:
+        case token_semicolon:
             continue;
         default:
             return failure(*token, "expected start of statement");
@@ -332,10 +299,11 @@ Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarLi
     abort();
 }
 
-Result invoke_function(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions, const Function function,
+Result invoke_function(const char* contents, Token** token, StackFrame* frame, VarList* globals,
+                       FunctionList* functions, const Function function,
                        FILE* file)
 {
-    token_matches(*token, opening_paren);
+    token_matches(*token, token_opening_paren);
     *token = (*token)->next;
     for (int i = 0; i < frame->allocations.len; ++i)
     {
@@ -359,30 +327,211 @@ Result invoke_function(const char* contents, Token** token, StackFrame* frame, V
 
     for (int i = 0; i < function.arguments.len; i++)
     {
-        char statement = parse_statement(contents, token, frame, globals, functions, file);
+        AstNode node;
+        forward_err(parse_statement(contents, token, globals, functions, token_closing_paren, &node));
         if (i < 6)
         {
-
-        } else
+        }
+        else
         {
-
         }
 
         if (i + 1 == function.arguments.len)
         {
-            token_matches(*token, closing_paren);
-        } else
+            token_matches(*token, token_closing_paren);
+        }
+        else
         {
-            token_matches(*token, comma);
+            token_matches(*token, token_comma);
         }
     }
     fprintf(file, "call %s\n", function.name);
     return success();
 }
 
-StackAllocation* parse_statement(const char* contents, Token** token, StackFrame* frame, VarList* globals,
-                                 FunctionList* functions, FILE* file)
+ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList* globals,
+                                FunctionList* functions, StrList *literals, AstNode* node, FILE* file)
 {
-    *token = (*token)->next;
-    return r8;
+    switch (node->type)
+    {
+    case op_nop:
+        return NULL;
+    case op_function:
+        break;
+    case op_array_index:
+        break;
+    case op_comma:
+        stackframe_free_ref(frame, solve_node_allocation(contents, frame, globals, functions, literals, node->left, file));
+        return solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+    case op_unary_negate:
+        return unarry_op(contents, "neg", frame, globals, functions, literals, node, file);
+    case op_unary_plus:
+        return solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
+    case op_unary_addressof:
+        break;
+    case op_unary_derefernce:
+        break;
+    case op_unary_not:
+        break;
+    case op_unary_bitwise_not:
+        return unarry_op(contents, "neg", frame, globals, functions, literals, node, file);
+    case op_add:
+        return simple_op(contents, "add", frame, globals, functions, literals, node, file);
+    case op_subtract:
+        return simple_op(contents, "sub", frame, globals, functions, literals, node, file);
+    case op_multiply: //fixme
+        return simple_op(contents, "imul", frame, globals, functions, literals, node, file);
+    case op_divide:
+        //fixme div is not simple
+        break;
+    case op_modulo:
+        //fixme div is not simple
+        break;
+    case op_bitwise_or:
+        return simple_op(contents, "or", frame, globals, functions, literals, node, file);
+    case op_bitwise_xor:
+        return simple_op(contents, "xor", frame, globals, functions, literals, node, file);
+    case op_bitwise_and:
+        return simple_op(contents, "and", frame, globals, functions, literals, node, file);
+    case op_assignment:
+        break;
+    case op_and:
+        break;
+    case op_or:
+        break;
+    case op_deref_member_access:
+        break;
+    case op_member_access:
+        break;
+    case op_bitwise_left_shift:
+        break;
+    case op_bitwise_right_shift:
+        break;
+    case op_compare_equals:
+        break;
+    case op_compare_not_equals:
+        break;
+    case op_less_than:
+        break;
+    case op_greater_than:
+        break;
+    case op_less_than_equal:
+        break;
+    case op_greater_than_equal:
+        {
+        }
+        break;
+    case op_value_constant:
+        {
+            ValueRef* alloc = malloc(sizeof(ValueRef));
+            alloc->type = ref_constant;
+            char* refr = malloc(node->token->len + 2);
+            refr[0] = '$';
+            strncpy(refr + 1, contents + node->token->index, node->token->len);
+            refr[node->token->len + 1] = '\0';
+            alloc->repr = refr;
+            return alloc;
+        }
+        break;
+    case op_value_variable:
+        return stackframe_get_id(frame, contents, node->token);
+    };
+    //     bool paren = (*token)->type == token_opening_paren;
+    //     bool dualOp = false;
+    //     PtrList output;
+    //     PtrList operators;
+    //     ptrlist_init(&output, 2);
+    //     ptrlist_init(&operators, 2);
+    //     while (true)
+    //     {
+    //         *token = (*token)->next;
+    //         switch ((*token)->type)
+    //         {
+    //         case token_closing_paren:
+    //             {
+    //                 if (!paren)
+    //                 {
+    //                     exit(14);
+    //                 }
+    //                 paren = false;
+    //             }
+    //         case token_semicolon: //no break
+    //             {
+    //                 if (paren) exit(15);
+    //                 return ;
+    //             }
+    //             break;
+    //         case token_identifier:
+    //             {
+    //                 assert(!dualOp);
+    //                 dualOp = true;
+    //             }
+    //             break;
+    //         case token_constant:
+    //             {
+    //                 assert(!dualOp);
+    //                 ptrlist_add(&output, *token);
+    //             }
+    //             break;
+    //         default:
+    //             if (!dualOp)
+    //             {
+    //                 bool works = false;
+    //                 switch ((*token)->type)
+    //                 {
+    //                 case token_amperstand:
+    //                 case token_asterik:
+    //                 case token_exclaimation:
+    //                 case token_tilde:
+    //                 case token_plus:
+    //                 case token_minus:
+    //                     works = true;
+    //                     break;
+    //                 case token_opening_paren:
+    //                     {
+    //                         StackAllocation *allocation = parse_statement(contents, token, frame, globals, functions, file);
+    //
+    //                     }
+    //                     break;
+    //                 default:
+    //                     break;
+    //                 }
+    //                 if (works) break;
+    //             }
+    //             assert(dualOp);
+    //             dualOp = false;
+    //
+    //             break;
+    //         }
+    //     }
+    //     return NULL; //fixme
+    exit(23);
 }
+
+ValueRef* simple_op(const char* contents, const char* op, StackFrame* frame, VarList* globals, FunctionList* functions,
+                    StrList* literals, AstNode* node, FILE* file)
+{
+    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+
+    stackframe_allocate_temporary_from(frame, &left, file);
+
+    char* mnemonicL = allocation_mnemonic(left);
+    char* mnemonicR = allocation_mnemonic(right);
+    fprintf(file, "%s%c %s, %s\n", op, 'q', mnemonicR, mnemonicL);
+    stackframe_free_ref(frame, right);
+    free(mnemonicL);
+    free(mnemonicR);
+    return left;
+}
+
+ValueRef* unarry_op(const char* contents, const char* op, StackFrame* frame, VarList* globals, FunctionList* functions, StrList* literals, AstNode* node, FILE* file)
+{
+    ValueRef* ref = solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
+    stackframe_allocate_temporary_from(frame, &ref, file);
+    char* mnemonic = allocation_mnemonic(ref);
+    fprintf(file, "%s%c %s\n", op, 'q', mnemonic);
+    free(mnemonic);
+    return ref;
+}
+

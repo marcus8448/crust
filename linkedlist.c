@@ -2,22 +2,26 @@
 #include <stdlib.h>
 
 #define LINKEDLIST_IMPL(name, prefix, type) \
-void prefix##node_init(struct name##Node *node, type value) \
+struct name##Node \
+{ \
+struct name##Node *next; \
+type value; \
+}; \
+\
+static void prefix##node_init(struct name##Node *node, type value) \
 { \
     node->next = NULL; \
-    node->prev = NULL; \
     node->value = value; \
 } \
 \
 void prefix##linkedlist_init(name##LinkedList* list) \
 { \
-    list->first = NULL; \
-    list->last = NULL; \
+    list->head = NULL; \
 } \
 \
 size_t prefix##linkedlist_size(const name##LinkedList* list) \
 { \
-    const struct name##Node* node = list->first; \
+    const struct name##Node* node = list->head; \
     size_t i = 0; \
     while (node != NULL) \
     { \
@@ -31,26 +35,20 @@ void prefix##linkedlist_push(name##LinkedList* list, type value) \
 { \
     struct name##Node *node = malloc(sizeof(struct name##Node)); \
     prefix##node_init(node, value); \
-    if (list->last == NULL) \
+    if (list->head == NULL) \
     { \
-        list->first = node; \
-        list->last = node; \
+        list->head = node; \
     } else \
     { \
-        list->last->next = node; \
-        node->prev = list->last; \
-        list->last = node; \
+        node->next = list->head; \
+        list->head = node; \
     } \
 } \
 \
 int prefix##linkedlist_pop(name##LinkedList* list) \
 { \
-    struct name##Node* removed = list->last; \
-    list->last = list->last->prev; \
-    if (list->last != NULL) \
-    { \
-        list->last->next = NULL; \
-    } \
+    struct name##Node* removed = list->head; \
+    list->head = list->head->next; \
     type value = removed->value; \
     free(removed); \
     return value; \
@@ -58,7 +56,7 @@ int prefix##linkedlist_pop(name##LinkedList* list) \
 \
 int prefix##linkedlist_get(name##LinkedList* list, int index) \
 { \
-    const struct name##Node* node = list->first; \
+    const struct name##Node* node = list->head; \
     for (int i = 0; i < index; ++i) \
     { \
         node = node->next; \
@@ -66,4 +64,4 @@ int prefix##linkedlist_get(name##LinkedList* list, int index) \
     return node->value; \
 }
 
-// LINKEDLIST_IMPL(Int, int, int)
+LINKEDLIST_IMPL(Int, int, int)

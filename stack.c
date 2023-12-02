@@ -2,7 +2,13 @@
 #include <stdlib.h>
 
 #define STACK_IMPL(name, prefix, type) \
-void prefix##node_init(struct name##Node *node, type value) \
+struct name##Node \
+{ \
+struct name##Node *next; \
+type value; \
+}; \
+\
+static void prefix##node_init(struct name##Node *node, type value) \
 { \
     node->next = NULL; \
     node->value = value; \

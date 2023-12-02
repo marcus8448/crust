@@ -15,8 +15,7 @@ typedef struct \
 void prefix##list_init(name##List* list, const int capacity); \
 void prefix##list_add(name##List* list, type value); \
 void prefix##list_remove(name##List* list, int index); \
-type prefix##list_get(const name##List* list, int index); \
-
+type prefix##list_get(const name##List* list, int index);
 #define LIST_IMPL(name, prefix, type) \
 void prefix##list_init(name##List* list, const int capacity) \
 { \
@@ -52,10 +51,10 @@ type prefix##list_get(const name##List* list, const int index) \
     return list->array[index]; \
 }
 
-LIST_API(Int, int, int)
+LIST_API(Ptr, ptr, void *)
 LIST_API(Str, str, char *)
 
-int strlist_indexof_after(const StrList* list, int start, const char *value);
-int strlist_indexof(const StrList* list, const char *value);
+int strlist_indexof_after(const StrList* list, int start, const char* value);
+int strlist_indexof(const StrList* list, const char* value);
 
 #endif //CLAMOR_LIST_H

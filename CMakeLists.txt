@@ -20,6 +20,8 @@ add_executable(crust main.c
         register.h
         types.c
         types.h
+        ir.c
+        ir.h
 )
 
 target_compile_definitions(crust PRIVATE _CRT_SECURE_NO_WARNINGS)

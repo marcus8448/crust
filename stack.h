@@ -3,12 +3,6 @@
 #include <stddef.h>
 
 #define STACK_API(name, prefix, type) \
-struct name##Node \
-{ \
-    struct name##Node *next; \
-    type value; \
-}; \
-\
 typedef struct { \
     struct name##Node* head; \
 } name##Stack; \

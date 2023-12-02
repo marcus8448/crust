@@ -7,43 +7,77 @@
 #include "list.h"
 #include "types.h"
 
-Result parse_function_declaration(const char* contents, const Token **token, Function *function)
+Result parse_function_declaration(const char* contents, const Token** token, Function* function)
 {
     *token = (*token)->next;
-    token_matches(*token, identifier);
+    token_matches(*token, token_identifier);
     function->name = token_copy(*token, contents);
 
     *token = (*token)->next;
-    token_matches(*token, opening_paren);
+    token_matches(*token, token_opening_paren);
 
-    while ((*token = (*token)->next)->type != closing_paren)
+    while ((*token = (*token)->next)->type != token_closing_paren)
     {
-        if ((*token)->type == identifier)
+        if ((*token)->type == token_identifier)
         {
             Variable argument;
             argument.name = token_copy(*token, contents);
 
             *token = (*token)->next;
-            token_matches(*token, colon);
+            token_matches(*token, token_colon);
 
             forward_err(parse_type(contents, token, &argument.type));
             varlist_add(&function->arguments, argument);
         }
 
         *token = (*token)->next;
-        if ((*token)->type == closing_paren) break;
-        token_matches_ext(*token, comma, ", or )");
+        if ((*token)->type == token_closing_paren) break;
+        token_matches_ext(*token, token_comma, ", or )");
     }
-    return success();
+
+    *token = (*token)->next;
+    if ((*token)->type == token_arrow)
+    {
+        forward_err(parse_type(contents, token, &function->retVal));
+    }
+
+    *token = (*token)->next;
+    token_matches_ext(*token, token_opening_curly_brace, "-> or {");
+
+    function->start = *token;
+    int depth = 0;
+    while ((*token)->type != token_eof)
+    {
+        if ((*token)->type == token_opening_curly_brace)
+        {
+            depth += 1;
+        }
+        else if ((*token)->type == token_closing_curly_brace)
+        {
+            if (--depth == 0) return success();
+        }
+        else if ((*token)->type == token_keyword_fn)
+        {
+            return failure(*token, "unexpected function delcaration (expected statement)");
+        }
+        *token = (*token)->next;
+    }
+
+    return failure(*token, "unexpected eof ({})");
 }
 
-Result preprocess_globals(char* contents, const Token *token, StrList *strLiterals, VarList *variables, FunctionList *functions, FILE* output)
+Result preprocess_globals(char* contents, const Token* token, StrList* strLiterals, VarList* variables,
+                          FunctionList* functions, FILE* output)
 {
     while (token != NULL)
     {
         switch (token->type)
         {
-        case keyword_fn:
+        case token_eof:
+            return success();
+        case token_semicolon:
+            break;
+        case token_keyword_fn:
             {
                 Function function;
                 function_init(&function);
@@ -53,15 +87,15 @@ Result preprocess_globals(char* contents, const Token *token, StrList *strLitera
                 {
                     return failure(token, "redefinition of function");
                 }
-
+                fprintf(output, ".globl %s\n", function.name);
                 functionlist_add(functions, function);
-                break;
             }
-        case keyword_var:
+            break;
+        case token_keyword_var:
             {
                 Variable variable;
                 token = token->next;
-                token_matches(token, identifier);
+                token_matches(token, token_identifier);
                 variable.name = token_copy(token, contents);
 
                 if (varlist_indexof(variables, variable.name) != -1)
@@ -70,7 +104,7 @@ Result preprocess_globals(char* contents, const Token *token, StrList *strLitera
                 }
 
                 token = token->next;
-                token_matches(token, colon);
+                token_matches(token, token_colon);
 
                 Type type;
                 forward_err(parse_type(contents, &token, &type));
@@ -79,48 +113,54 @@ Result preprocess_globals(char* contents, const Token *token, StrList *strLitera
                 varlist_add(variables, variable);
 
                 token = token->next;
-                if (token->type == semicolon)
+                if (token->type == token_semicolon)
                 {
                     typekind_size(type.kind);
                     fprintf(output, "%s:\n", variable.name);
                     const int bytes = size_bytes(typekind_size(type.kind));
                     fprintf(output, "\t.zero\t%i\n", bytes);
-                    fprintf(output,  "\t.size\t%s, %i\n", variable.name, bytes);
-                } else
-                {
-                    token_matches(token, equals_assign);
-                    token = token->next;
-                    const Token *value = token;
-                    token_matches(token, constant);
-                    token = token->next;
-                    token_matches(token, semicolon);
-                    const int bytes = size_bytes(typekind_size(type.kind));
-                    fprintf(output, "%s:\n", variable.name);
-                    fprintf(output, "\t.%s\t%.*s\n", size_mnemonic(typekind_size(type.kind)), value->len, contents + value->index);
                     fprintf(output, "\t.size\t%s, %i\n", variable.name, bytes);
                 }
-                break;
-                case string:
-                    char *buf = malloc(token->len + 1);
+                else
+                {
+                    token_matches(token, token_equals_assign);
+                    token = token->next;
+                    const Token* value = token;
+                    token_matches(token, token_constant);
+                    token = token->next;
+                    token_matches(token, token_semicolon);
+                    const int bytes = size_bytes(typekind_size(type.kind));
+                    fprintf(output, "%s:\n", variable.name);
+                    fprintf(output, "\t.%s\t%.*s\n", size_mnemonic(typekind_size(type.kind)), value->len,
+                            contents + value->index);
+                    fprintf(output, "\t.size\t%s, %i\n", variable.name, bytes);
+                }
+            }
+            break;
+        case token_string:
+            {
+                char* buf = malloc(token->len + 1);
                 memcpy(buf, contents + token->index, token->len);
                 buf[token->len] = '\0';
                 const int index = strlist_indexof(strLiterals, buf);
                 if (index != -1)
                 {
                     free(buf);
-                } else
+                }
+                else
                 {
-                    fprintf(output, ".L.STR%i:\n\t.asciz\t%s\n\t.size\t.L.STR%i, %i\n", strLiterals->len, buf, strLiterals->len, token->len - 1);
+                    fprintf(output, ".L.STR%i:\n\t.asciz\t%s\n\t.size\t.L.STR%i, %i\n", strLiterals->len, buf,
+                            strLiterals->len, token->len - 1);
                     strlist_add(strLiterals, buf);
                 }
-                break;
             }
-        case keyword_extern:
+            break;
+        case token_keyword_extern:
             {
                 token = token->next;
                 switch (token->type)
                 {
-                case keyword_fn:
+                case token_keyword_fn:
                     {
                         Function function;
                         function_init(&function);
@@ -129,11 +169,11 @@ Result preprocess_globals(char* contents, const Token *token, StrList *strLitera
                         fprintf(output, ".extern %s\n", function.name);
                     }
                     break;
-                case keyword_var:
+                case token_keyword_var:
                     {
                         Variable variable;
                         token = token->next;
-                        token_matches(token, identifier);
+                        token_matches(token, token_identifier);
                         variable.name = token_copy(token, contents);
 
                         if (varlist_indexof(variables, variable.name) != -1)
@@ -142,7 +182,7 @@ Result preprocess_globals(char* contents, const Token *token, StrList *strLitera
                         }
 
                         token = token->next;
-                        token_matches(token, colon);
+                        token_matches(token, token_colon);
 
                         Type type;
                         forward_err(parse_type(contents, &token, &type));
@@ -153,12 +193,12 @@ Result preprocess_globals(char* contents, const Token *token, StrList *strLitera
                     }
                     break;
                 default:
-                    break;
+                    return failure(token, "expected function or variable definition");
                 }
             }
             break;
         default:
-            break;
+            return failure(token, "expected function or variable definition");
         }
         token = token->next;
     }
