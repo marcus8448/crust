@@ -22,16 +22,16 @@ typedef enum
     Long,
     // 64bit
     Quad
-} Size;
+} Width;
 
 typedef struct
 {
-    Size size;
+    Width size;
     OpType operation;
     char* values[3];
 } Statement;
 
 void statement_init(Statement* statement);
 
-char get_suffix_s(Size size);
+char get_suffix_s(Width size);
 #endif //IR_H

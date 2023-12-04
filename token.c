@@ -65,9 +65,9 @@ bool tokenize(const char* data, const size_t len, Token* head)
                     {
                         token_push(&next, token_keyword_fn, i - bufLen, bufLen);
                     }
-                    else if (strncmp(buffer, "var", bufLen) == 0)
+                    else if (strncmp(buffer, "let", bufLen) == 0)
                     {
-                        token_push(&next, token_keyword_var, i - bufLen, bufLen);
+                        token_push(&next, token_keyword_let, i - bufLen, bufLen);
                     }
                     else if (strncmp(buffer, "extern", bufLen) == 0)
                     {
@@ -386,7 +386,7 @@ const char* token_name(const TokenType type)
         return ">>";
     case token_keyword_fn:
         return "fn";
-    case token_keyword_var:
+    case token_keyword_let:
         return "var";
     case token_keyword_extern:
         return "extern";

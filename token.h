@@ -59,7 +59,7 @@ typedef enum
     token_right_shift,
 
     token_keyword_fn,
-    token_keyword_var,
+    token_keyword_let,
     token_keyword_extern,
 
     token_identifier,

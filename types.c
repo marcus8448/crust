@@ -3,45 +3,56 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-Size typekind_size(const TypeKind kind)
+Width typekind_width(const TypeKind kind)
 {
-    return kind & 0b001111;
+    switch (kind) {
+    case i8:
+        return Byte;
+    case i16:
+        return Word;
+    case i32:
+        return Long;
+    case ptr:
+    case i64:
+        return Quad;
+    case f32:
+        return Long;
+    case f64:
+        return Quad;
+    }
+    exit(32);
 }
 
-int size_bytes(const Size size)
+int size_bytes(const Width size)
 {
     switch (size)
     {
-    case unused:
-        return 0;
-    case s8:
+    case Byte:
         return 1;
-    case s16:
+    case Word:
         return 2;
-    case s32:
+    case Long:
         return 4;
-    case s64:
+    case Quad:
         return 8;
     }
     exit(5);
 }
 
-const char* size_mnemonic(const Size size)
+const char* size_mnemonic(const Width size)
 {
     switch (size)
     {
-    case unused:
-        return 0;
-    case s8:
+    case Byte:
         return "byte";
-    case s16:
+    case Word:
         return "short";
-    case s32:
+    case Long:
         return "long";
-    case s64:
+    case Quad:
         return "quad";
     }
-    return 0;
+    exit(30);
 }
 
 bool is_fp(const TypeKind kind)

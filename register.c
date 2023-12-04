@@ -6,6 +6,13 @@
 
 LIST_IMPL(StackAlloc, stackalloc, ValueRef)
 
+int nullable_strcmp(char const* a, char const* b)
+{
+    if (a == NULL) return 1;
+    if (b == NULL) return -1;
+    return strcmp(a, b);
+}
+
 void stackframe_init(StackFrame* frame, const StackFrame* parent)
 {
     //TODO: rbx, rsp, rbp, r12, r13, r14, and r15
@@ -42,7 +49,7 @@ ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, const Variable variab
     {
         for (int i = 0; i < frame->allocations.len; ++i)
         {
-            if (strcmp(variable.name, frame->allocations.array[i].variable.name) == 0)
+            if (nullable_strcmp(variable.name, frame->allocations.array[i].name) == 0)
             {
                 if (frame->allocations.array[i].reg != -1)
                 {
@@ -55,24 +62,23 @@ ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, const Variable variab
         }
 
         ValueRef ref;
-        ref.type = ref_variable;
-        ref.offset = 0;
-        ref.on_stack = false;
+        ref_init_var(&ref, variable);
+
         ref.reg = reg;
-        ref.variable = variable;
         frame->activeRegisters[reg] = true;
+
         stackalloclist_add(&frame->allocations, ref);
         return &frame->allocations.array[frame->allocations.len - 1];
     }
     for (int i = 0; i < frame->allocations.len; ++i)
     {
-        if (strcmp(variable.name, frame->allocations.array[i].variable.name) == 0)
+        if (nullable_strcmp(variable.name, frame->allocations.array[i].name) == 0)
         {
             if (frame->allocations.array[i].reg != -1)
             {
                 if (frame->allocations.array[i].reg != reg)
                 {
-                    const Size size = typekind_size(variable.type.kind);
+                    const Width size = typekind_width(variable.type.kind);
                     fprintf(output, "mov%c %s, %s\n", get_suffix(size), get_register_mnemonic(size, reg),
                             get_register_mnemonic(size, frame->allocations.array[i].reg));
                 }
@@ -81,7 +87,7 @@ ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, const Variable variab
             {
                 frame->allocations.array[i].reg = stackframe_make_register_available(frame, output);
                 frame->activeRegisters[frame->allocations.array[i].reg] = true;
-                const Size size = typekind_size(variable.type.kind);
+                const Width size = typekind_width(variable.type.kind);
                 fprintf(output, "mov%c %s, %s\n", get_suffix(size), get_register_mnemonic(size, reg),
                         get_register_mnemonic(size, frame->allocations.array[i].reg));
                 return &frame->allocations.array[i];
@@ -90,13 +96,10 @@ ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, const Variable variab
     }
 
     ValueRef ref;
-    ref.type = ref_variable;
-    ref.offset = 0;
-    ref.on_stack = false;
-    ref.reg = stackframe_make_register_available(frame, output);
-    ref.variable = variable;
-    frame->activeRegisters[ref.reg] = true;
-    const Size size = typekind_size(variable.type.kind);
+    ref_init_var(&ref, variable);
+    stackframe_set_register(frame, &ref, stackframe_make_register_available(frame, output));
+
+    const Width size = typekind_width(variable.type.kind);
     fprintf(output, "mov%c %s, %s\n", get_suffix(size), get_register_mnemonic(size, reg),
             get_register_mnemonic(size, ref.reg));
     stackalloclist_add(&frame->allocations, ref);
@@ -107,30 +110,26 @@ ValueRef* stackframe_allocate(StackFrame* frame, const Variable variable)
 {
     for (int i = 0; i < frame->allocations.len; ++i)
     {
-        if (strcmp(variable.name, frame->allocations.array[i].variable.name) == 0)
+        assert(frame->allocations.array[i].type != ref_constant);
+        if (nullable_strcmp(variable.name, frame->allocations.array[i].name) == 0)
         {
+            exit(54);
             return &frame->allocations.array[i];
         }
     }
 
     ValueRef ref;
-    ref.type = ref_variable;
-    ref.offset = 0;
-    ref.on_stack = false;
-    ref.reg = -1;
-    ref.variable = variable;
+    ref_init_var(&ref, variable);
+
     stackalloclist_add(&frame->allocations, ref);
     return &frame->allocations.array[frame->allocations.len - 1];
 }
 
-ValueRef* stackframe_allocate_temporary(StackFrame* frame, FILE* output)
+ValueRef* stackframe_allocate_temporary(StackFrame* frame, Type type, FILE* output)
 {
     ValueRef ref;
-    ref.type = ref_temporary;
-    ref.offset = 0;
-    ref.on_stack = false;
-    ref.reg = stackframe_make_register_available(frame, output);
-    frame->activeRegisters[ref.reg] = true;
+    ref_init_temp(&ref, type);
+    stackframe_set_register(frame, &ref, stackframe_make_register_available(frame, output));
     stackalloclist_add(&frame->allocations, ref);
     return &frame->allocations.array[frame->allocations.len - 1];
 }
@@ -144,11 +143,12 @@ void stackframe_allocate_temporary_from(StackFrame* frame, ValueRef** maybe_temp
     case ref_variable:
     case ref_constant:
         {
-            ValueRef* temp = stackframe_allocate_temporary(frame, output);
+            ValueRef* temp = stackframe_allocate_temporary(frame, (*maybe_temp)->value_type, output);
             char* mnemonicN = allocation_mnemonic(temp);
             char* mnemonicL = allocation_mnemonic(*maybe_temp);
-            fprintf(output, "mov%c %s, %s\n", 'q', mnemonicL, mnemonicN); //TODO
+            fprintf(output, "mov%c %s, %s\n", get_suffix(typekind_width(temp->value_type.kind)), mnemonicL, mnemonicN);
             free(mnemonicL);
+            free(mnemonicN);
             if ((*maybe_temp)->type == ref_constant) stackframe_free_ref(frame, *maybe_temp);
             *maybe_temp = temp;
         }
@@ -162,19 +162,19 @@ ValueRef* stackframe_allocate_variable_from(StackFrame* frame, ValueRef* value, 
     {
     case ref_temporary:
         {
-            value->variable = variable;
+            value->name = variable.name;
+            value->value_type = variable.type;
             value->type = ref_variable;
             return value;
         }
     case ref_constant:
         {
             ValueRef* temp = stackframe_allocate(frame, variable);
-            temp->reg = stackframe_make_register_available(frame, output);
-            frame->activeRegisters[temp->reg] = true;
+            stackframe_set_register(frame, temp, stackframe_make_register_available(frame, output));
 
             char* mnemonicN = allocation_mnemonic(temp);
             char* mnemonicL = allocation_mnemonic(value);
-            fprintf(output, "mov%c %s, %s # store variable %s \n", get_suffix(typekind_size(variable.type.kind)), mnemonicL, mnemonicN, variable.name); //TODO
+            fprintf(output, "mov%c %s, %s # store variable %s \n", get_suffix(typekind_width(variable.type.kind)), mnemonicL, mnemonicN, variable.name);
             free(mnemonicL);
             free(mnemonicN);
             stackframe_free_ref(frame, value);
@@ -186,7 +186,7 @@ ValueRef* stackframe_allocate_variable_from(StackFrame* frame, ValueRef* value, 
 
             char* mnemonicN = allocation_mnemonic(temp);
             char* mnemonicL = allocation_mnemonic(value);
-            fprintf(output, "mov%c %s, %s\n # copy variable %s into %s", get_suffix(typekind_size(variable.type.kind)), mnemonicL, mnemonicN, value->variable.name, variable.name); //TODO
+            fprintf(output, "mov%c %s, %s\n # copy variable %s into %s", get_suffix(typekind_width(variable.type.kind)), mnemonicL, mnemonicN, value->name, variable.name);
             free(mnemonicL);
             free(mnemonicN);
             return temp;
@@ -218,7 +218,8 @@ ValueRef* stackframe_get(StackFrame* frame, const Variable variable)
 {
     for (int i = 0; i < frame->allocations.len; ++i)
     {
-        if (strcmp(variable.name, frame->allocations.array[i].variable.name) == 0)
+        assert(frame->allocations.array[i].type != ref_constant);
+        if (nullable_strcmp(variable.name, frame->allocations.array[i].name) == 0)
         {
             return &frame->allocations.array[i];
         }
@@ -226,11 +227,12 @@ ValueRef* stackframe_get(StackFrame* frame, const Variable variable)
     return NULL;
 }
 
-ValueRef* stackframe_get_name(StackFrame* frame, const char* name)
+ValueRef* stackframe_get_by_name(StackFrame* frame, const char* name)
 {
     for (int i = 0; i < frame->allocations.len; ++i)
     {
-        if (strcmp(name, frame->allocations.array[i].variable.name) == 0)
+        assert(frame->allocations.array[i].type != ref_constant);
+        if (strcmp(name, frame->allocations.array[i].name) == 0)
         {
             return &frame->allocations.array[i];
         }
@@ -238,23 +240,28 @@ ValueRef* stackframe_get_name(StackFrame* frame, const char* name)
     return NULL;
 }
 
-ValueRef* stackframe_get_id(StackFrame* frame, const char* contents, Token* id)
+ValueRef* stackframe_get_by_token(StackFrame* frame, const char* contents, Token* id)
 {
     for (int i = 0; i < frame->allocations.len; ++i)
     {
-        bool pass = false;
-        for (int j = 0; j < id->len; j++)
+        assert(frame->allocations.array[i].type != ref_constant);
+
+        if (frame->allocations.array[i].name != NULL)
         {
-            if (contents[id->index + j] != frame->allocations.array[i].variable.name[j])
+            bool pass = false;
+            for (int j = 0; j < id->len; j++)
             {
-                pass = false;
-                break;
+                if (contents[id->index + j] != frame->allocations.array[i].name[j])
+                {
+                    pass = false;
+                    break;
+                }
+                pass = true;
             }
-            pass = true;
-        }
-        if (pass)
-        {
-            return &frame->allocations.array[i];
+            if (pass)
+            {
+                return &frame->allocations.array[i];
+            }
         }
     }
     return NULL;
@@ -268,11 +275,7 @@ char* allocation_mnemonic(const ValueRef* alloc)
     }
     if (alloc->reg != -1)
     {
-        if (alloc->type == ref_temporary)
-        {
-            return strdup(get_register_mnemonic(s64, alloc->reg)); //FIXME
-        }
-        return strdup(get_register_mnemonic(typekind_size(alloc->variable.type.kind), alloc->reg));
+        return strdup(get_register_mnemonic(typekind_width(alloc->value_type.kind), alloc->reg));
     }
 
     assert(alloc->on_stack);
@@ -304,7 +307,7 @@ char stackframe_make_register_available(StackFrame* frame, FILE* output)
         ValueRef alloc = frame->allocations.array[i];
         if (alloc.type != ref_constant && alloc.reg != -1)
         {
-            const Size size = typekind_size(alloc.variable.type.kind);
+            const Width size = typekind_width(alloc.value_type.kind);
             if (!alloc.on_stack)
             {
                 alloc.on_stack = true;
@@ -328,30 +331,28 @@ void stackframe_load_arguments(StackFrame* frame, const Function* function)
     //rdi, rsi, rdx, rcx, r8, r9 -> stack
     for (int i = 0; i < function->arguments.len; i++)
     {
-        ValueRef alloc;
-        alloc.variable = function->arguments.array[i];
+        ValueRef ref;
+        ref_init_var(&ref, function->arguments.array[i]);
         if (i < 6)
         {
-            alloc.on_stack = false;
-            alloc.offset = 0;
-            alloc.reg = argumentRegisters[i];
+            stackframe_set_register(frame, &ref, argumentRegisters[i]);
         }
         else
         {
-            alloc.on_stack = true;
-            alloc.offset = 16 * (i - 6);
-            alloc.reg = -1;
+            ref.on_stack = true;
+            ref.offset = 16 * (i - 6);
         }
-        stackalloclist_add(&frame->allocations, alloc);
+        stackalloclist_add(&frame->allocations, ref);
     }
 }
 
 void stackframe_moveto_register(StackFrame* frame, ValueRef* alloc, FILE* output)
 {
+    assert(alloc->type != ref_constant);
     if (alloc->reg == -1)
     {
         alloc->reg = stackframe_make_register_available(frame, output);
-        const Size size = typekind_size(alloc->variable.type.kind);
+        const Width size = typekind_width(alloc->value_type.kind);
         fprintf(output, "mov%c %i(%%rbp), %s\n", get_suffix(size), alloc->offset,
                 get_register_mnemonic(size, alloc->reg));
     }
@@ -373,8 +374,8 @@ void stackframe_force_into_register(StackFrame* frame, ValueRef* alloc, const ch
         }
     }
 
-    Size size = typekind_size(alloc->variable.type.kind);
-    if (alloc->type == ref_temporary) size = s64;
+    Width size = typekind_width(alloc->value_type.kind);
+    if (alloc->type == ref_temporary) size = Quad;
     fprintf(output, "mov%c %s, %s\n", get_suffix(size), get_register_mnemonic(size, alloc->reg),
             get_register_mnemonic(size, reg));
     alloc->reg = reg;
@@ -391,7 +392,7 @@ void stackframe_set_or_copy_register(StackFrame* frame, ValueRef* ref, char reg,
     {
         ref->reg = stackframe_make_register_available(frame, output);
         frame->activeRegisters[ref->reg] = true;
-        const Size size = typekind_size(ref->variable.type.kind);
+        const Width size = typekind_width(ref->value_type.kind);
         fprintf(output, "mov%c %s, %s\n", get_suffix(size), get_register_mnemonic(size, reg),
                 get_register_mnemonic(size, ref->reg));
     }
@@ -400,8 +401,8 @@ void stackframe_set_or_copy_register(StackFrame* frame, ValueRef* ref, char reg,
 void stackframe_moveto_stack(StackFrame* frame, ValueRef* ref, FILE* output)
 {
     if (ref->type == ref_constant) return;
-    Size size = typekind_size(ref->variable.type.kind);
-    if (ref->type == ref_temporary) size = s64; //fixme
+    Width size = typekind_width(ref->value_type.kind);
+    if (ref->type == ref_temporary) size = Quad; //fixme
     if (!ref->on_stack)
     {
         ref->on_stack = true;
@@ -412,9 +413,16 @@ void stackframe_moveto_stack(StackFrame* frame, ValueRef* ref, FILE* output)
     if (ref->reg != -1)
     {
         fprintf(output, "mov%c %s, %i(%%rbp) # store variable '%s' to stack\n", get_suffix(size),
-                get_register_mnemonic(size, ref->reg), ref->offset, ref->variable.name);
+                get_register_mnemonic(size, ref->reg), ref->offset, ref->name);
     }
     ref->reg = -1;
+}
+
+void stackframe_set_register(StackFrame* frame, ValueRef* ref, const char reg)
+{
+    assert(!frame->activeRegisters[reg]);
+    frame->activeRegisters[reg] = true;
+    ref->reg = reg;
 }
 
 
@@ -432,41 +440,68 @@ void stackframe_free(const StackFrame* frame, FILE* output)
     }
 }
 
-const char* get_register_mnemonic(const Size size, const int index)
+char ref_get_register(const ValueRef* ref)
+{
+    switch (ref->type)
+    {
+    case ref_variable:
+    case ref_temporary:
+        return ref->reg;
+    default:
+        return -1;
+    }
+}
+
+void ref_init_var(ValueRef* ref, Variable variable)
+{
+    ref->type = ref_variable;
+    ref->name = variable.name;
+    ref->value_type = variable.type;
+    ref->on_stack = false;
+    ref->offset = 0;
+    ref->reg = -1;
+}
+
+void ref_init_temp(ValueRef* ref, Type type)
+{
+    ref->type = ref_temporary;
+    ref->name = NULL;
+    ref->value_type = type;
+    ref->on_stack = false;
+    ref->offset = 0;
+}
+
+const char* get_register_mnemonic(const Width size, const int index)
 {
     switch (size)
     {
-    case unused:
-        break;
-    case s64:
+    case Quad:
         return mnemonic64[index];
-    case s32:
+    case Long:
         return mnemonic32[index];
-    case s16:
+    case Word:
         return mnemonic16[index];
-    case s8:
+    case Byte:
         return mnemonic8[index];
     }
 
     return NULL;
 }
 
-char get_suffix(const Size size)
+char get_suffix(const Width size)
 {
     switch (size)
     {
-    case unused:
-        exit(30);
-    case s8:
+    case Byte:
         return 'b';
-    case s16:
+    case Word:
         return 's';
-    case s32:
+    case Long:
         return 'l';
-    case s64:
+    case Quad:
         return 'q';
     }
-    return 0;
+    exit(30);
 }
 
 

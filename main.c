@@ -55,29 +55,29 @@ int filedata_init(FileData* data, const char* filename)
     return 0;
 }
 
-void print_error(const char* section, const Result result, const FileData file)
+void print_error(const char* section, const Result result, const char *filename, const char* contents, const int len)
 {
     int line = 1;
     int lineStart = 0;
     for (int j = 0; j < result.failure->index; j++)
     {
-        if (j < result.failure->index && file.contents[j] == '\n')
+        if (j < result.failure->index && contents[j] == '\n')
         {
             lineStart = j + 1;
             line++;
         }
     }
     int lineLen = 0;
-    for (int j = lineStart; j < file.len && file.contents[j] != '\n'; j++)
+    for (int j = lineStart; j < len && contents[j] != '\n'; j++)
     {
         lineLen = j - lineStart + 1;
     }
-    printf("%s error at %s[%i:%i]\n", section, file.filename, line, result.failure->index - lineStart);
+    printf("%s error at %s[%i:%i]\n", section, filename, line, result.failure->index - lineStart);
     printf("%.*s\n"
-           "%*s%.*s\n", lineLen, file.contents + lineStart, result.failure->index - lineStart, "", result.failure->len + 1,
+           "%*s%.*s\n", lineLen, contents + lineStart, result.failure->index - lineStart, "", result.failure->len,
            "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
-    printf("%*s'%.*s': %s\n", result.failure->index - lineStart, "", result.failure->len + 1,
-           file.contents + result.failure->index, result.reason);
+    printf("%*s'%.*s': %s\n", result.failure->index - lineStart, "", result.failure->len,
+           contents + result.failure->index, result.reason);
 }
 
 Result parse_function(const char* contents, Function* function, VarList* globals, FunctionList* functions,
@@ -132,7 +132,7 @@ int main(const int argc, char** argv)
         if (!successful(result))
         {
             fflush(output);
-            print_error("Preprocessing", result, files[i]);
+            print_error("Preprocessing", result, files[i].filename, files[i].contents, files[i].len);
             exit(1);
         }
     }
@@ -141,14 +141,14 @@ int main(const int argc, char** argv)
 
     for (int i = 0; i < argc - 1; i++)
     {
-        for (int i = 0; i < functions.len; ++i)
+        for (int j = 0; j < functions.len; ++j)
         {
-            const Result result = parse_function(files[i].contents, &functions.array[i], &globals, &functions,
+            const Result result = parse_function(files[i].contents, &functions.array[j], &globals, &functions,
                                                  &strLiterals[i], output);
             if (!successful(result))
             {
                 fflush(output);
-                print_error("Parsing", result, files[i]);
+                print_error("Parsing", result, files[i].filename, files[i].contents, files[i].len);
                 exit(1);
             }
         }
@@ -169,6 +169,7 @@ Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarLi
 Result parse_function(const char* contents, Function* function, VarList* globals, FunctionList* functions,
                       StrList* literals, FILE* output)
 {
+    assert(contents != NULL);
     if (function->start != NULL)
     {
         StackFrame frame;
@@ -196,6 +197,7 @@ Result invoke_function(const char* contents, Token** token, StackFrame* frame, V
 Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarList* globals, FunctionList* functions,
                    StrList* literals, FILE* output)
 {
+    assert(contents != NULL);
     token_matches(*token, token_opening_curly_brace);
     while ((*token)->next != NULL)
     {
@@ -204,7 +206,7 @@ Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarLi
         case token_closing_curly_brace:
             fputs("ret\n", output);
             return success();
-        case token_keyword_var:
+        case token_keyword_let:
             {
                 Variable variable;
                 *token = (*token)->next;
@@ -221,7 +223,7 @@ Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarLi
                 *token = (*token)->next;
                 if ((*token)->type == token_semicolon)
                 {
-                    typekind_size(type.kind);
+                    typekind_width(type.kind);
                     stackframe_allocate(frame, variable);
                 }
                 else
@@ -273,7 +275,7 @@ Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarLi
             //     return false;
             // }
             //
-            // int reg = register_claim(registers, "@@IF!", s64);
+            // int reg = register_claim(registers, "@@IF!", Quad);
             // parse_statement(list, index, registers, reg, output);
             //
             // register_release(registers, reg);
@@ -309,7 +311,7 @@ Result invoke_function(const char* contents, Token** token, StackFrame* frame, V
     *token = (*token)->next;
     for (int i = 0; i < frame->allocations.len; ++i)
     {
-        switch (frame->allocations.array[i].reg)
+        switch (ref_get_register(&frame->allocations.array[i]))
         {
         case rax:
         case rdi:
@@ -427,6 +429,8 @@ ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList
         {
             ValueRef* alloc = malloc(sizeof(ValueRef));
             alloc->type = ref_constant;
+            alloc->value_type.kind = i64; //fixme
+            alloc->value_type.inner = NULL;
             char* refr = malloc(node->token->len + 2);
             refr[0] = '$';
             strncpy(refr + 1, contents + node->token->index, node->token->len);
@@ -436,7 +440,7 @@ ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList
         }
     case op_value_variable:
         {
-            ValueRef* ref = stackframe_get_id(frame, contents, node->token);
+            ValueRef* ref = stackframe_get_by_token(frame, contents, node->token);
             if (ref == NULL)
             {
                 exit(99);
@@ -526,7 +530,7 @@ ValueRef* simple_op(const char* contents, const char* op, StackFrame* frame, Var
 
     char* mnemonicL = allocation_mnemonic(left);
     char* mnemonicR = allocation_mnemonic(right);
-    fprintf(file, "%s%c %s, %s\n", op, 'q', mnemonicR, mnemonicL);
+    fprintf(file, "%s%c %s, %s\n", op, get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
     stackframe_free_ref(frame, right);
     free(mnemonicL);
     free(mnemonicR);
@@ -538,7 +542,7 @@ ValueRef* unarry_op(const char* contents, const char* op, StackFrame* frame, Var
     ValueRef* ref = solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
     stackframe_allocate_temporary_from(frame, &ref, file);
     char* mnemonic = allocation_mnemonic(ref);
-    fprintf(file, "%s%c %s\n", op, 'q', mnemonic);
+    fprintf(file, "%s%c %s\n", op, get_suffix(typekind_width(ref->value_type.kind)), mnemonic);
     free(mnemonic);
     return ref;
 }

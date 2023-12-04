@@ -1,6 +1,7 @@
 #ifndef TYPES_H
 #define TYPES_H
 #include "token.h"
+#include "ir.h"
 
 typedef enum
 {
@@ -25,19 +26,10 @@ typedef struct Type
     };
 } Type;
 
-typedef enum
-{
-    unused = 0b0000,
-    s8 = 0b0001,
-    s16 = 0b0010,
-    s32 = 0b0100,
-    s64 = 0b1000
-} Size;
-
 Result parse_type(const char* contents, const Token** token, Type* type);
 
-Size typekind_size(TypeKind kind);
-int size_bytes(Size size);
-const char* size_mnemonic(Size size);
+Width typekind_width(TypeKind kind);
+int size_bytes(Width size);
+const char* size_mnemonic(Width size);
 
 #endif //TYPES_H

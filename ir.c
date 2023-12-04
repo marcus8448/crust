@@ -9,7 +9,7 @@ void statement_init(Statement* statement)
     statement->values[2] = NULL;
 }
 
-char get_suffix_s(const Size size)
+char get_suffix_s(const Width size)
 {
     switch (size)
     {

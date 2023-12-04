@@ -7,7 +7,7 @@
 #include "list.h"
 #include "types.h"
 
-Result parse_function_declaration(const char* contents, const Token** token, Function* function)
+Result parse_function_declaration(const char* contents, const Token** token, Function* function, bool has_decl)
 {
     *token = (*token)->next;
     token_matches(*token, token_identifier);
@@ -39,31 +39,35 @@ Result parse_function_declaration(const char* contents, const Token** token, Fun
     if ((*token)->type == token_arrow)
     {
         forward_err(parse_type(contents, token, &function->retVal));
-    }
-
-    *token = (*token)->next;
-    token_matches_ext(*token, token_opening_curly_brace, "-> or {");
-
-    function->start = *token;
-    int depth = 0;
-    while ((*token)->type != token_eof)
-    {
-        if ((*token)->type == token_opening_curly_brace)
-        {
-            depth += 1;
-        }
-        else if ((*token)->type == token_closing_curly_brace)
-        {
-            if (--depth == 0) return success();
-        }
-        else if ((*token)->type == token_keyword_fn)
-        {
-            return failure(*token, "unexpected function delcaration (expected statement)");
-        }
         *token = (*token)->next;
     }
 
-    return failure(*token, "unexpected eof ({})");
+    if (has_decl)
+    {
+        token_matches_ext(*token, token_opening_curly_brace, "-> or {");
+
+        function->start = *token;
+        int depth = 0;
+        while ((*token)->type != token_eof)
+        {
+            if ((*token)->type == token_opening_curly_brace)
+            {
+                depth += 1;
+            }
+            else if ((*token)->type == token_closing_curly_brace)
+            {
+                if (--depth == 0) return success();
+            }
+            else if ((*token)->type == token_keyword_fn)
+            {
+                return failure(*token, "unexpected function delcaration (expected statement)");
+            }
+            *token = (*token)->next;
+        }
+        return failure(*token, "unexpected eof ({})");
+    }
+    token_matches(*token, token_semicolon);
+    return success();
 }
 
 Result preprocess_globals(char* contents, const Token* token, StrList* strLiterals, VarList* variables,
@@ -81,7 +85,7 @@ Result preprocess_globals(char* contents, const Token* token, StrList* strLitera
             {
                 Function function;
                 function_init(&function);
-                forward_err(parse_function_declaration(contents, &token, &function));
+                forward_err(parse_function_declaration(contents, &token, &function, true));
 
                 if (functionlist_indexof(functions, function.name) != -1)
                 {
@@ -91,7 +95,7 @@ Result preprocess_globals(char* contents, const Token* token, StrList* strLitera
                 functionlist_add(functions, function);
             }
             break;
-        case token_keyword_var:
+        case token_keyword_let:
             {
                 Variable variable;
                 token = token->next;
@@ -115,9 +119,9 @@ Result preprocess_globals(char* contents, const Token* token, StrList* strLitera
                 token = token->next;
                 if (token->type == token_semicolon)
                 {
-                    typekind_size(type.kind);
+                    typekind_width(type.kind);
                     fprintf(output, "%s:\n", variable.name);
-                    const int bytes = size_bytes(typekind_size(type.kind));
+                    const int bytes = size_bytes(typekind_width(type.kind));
                     fprintf(output, "\t.zero\t%i\n", bytes);
                     fprintf(output, "\t.size\t%s, %i\n", variable.name, bytes);
                 }
@@ -129,9 +133,9 @@ Result preprocess_globals(char* contents, const Token* token, StrList* strLitera
                     token_matches(token, token_constant);
                     token = token->next;
                     token_matches(token, token_semicolon);
-                    const int bytes = size_bytes(typekind_size(type.kind));
+                    const int bytes = size_bytes(typekind_width(type.kind));
                     fprintf(output, "%s:\n", variable.name);
-                    fprintf(output, "\t.%s\t%.*s\n", size_mnemonic(typekind_size(type.kind)), value->len,
+                    fprintf(output, "\t.%s\t%.*s\n", size_mnemonic(typekind_width(type.kind)), value->len,
                             contents + value->index);
                     fprintf(output, "\t.size\t%s, %i\n", variable.name, bytes);
                 }
@@ -164,12 +168,12 @@ Result preprocess_globals(char* contents, const Token* token, StrList* strLitera
                     {
                         Function function;
                         function_init(&function);
-                        forward_err(parse_function_declaration(contents, &token, &function));
+                        forward_err(parse_function_declaration(contents, &token, &function, false));
                         functionlist_add(functions, function);
                         fprintf(output, ".extern %s\n", function.name);
                     }
                     break;
-                case token_keyword_var:
+                case token_keyword_let:
                     {
                         Variable variable;
                         token = token->next;
