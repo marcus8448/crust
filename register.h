@@ -166,6 +166,7 @@ ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, Variable variable, ch
 ValueRef* stackframe_allocate(StackFrame* frame, Variable variable);
 ValueRef* stackframe_allocate_temporary(StackFrame* frame, FILE* output);
 void stackframe_allocate_temporary_from(StackFrame* frame, ValueRef** maybe_temp, FILE* output);
+ValueRef* stackframe_allocate_variable_from(StackFrame* frame, ValueRef* value, Variable variable, FILE* file);
 void stackframe_free_ref(StackFrame* frame, ValueRef* ref);
 ValueRef* stackframe_get(StackFrame* frame, Variable variable);
 ValueRef* stackframe_get_name(StackFrame* frame, const char* name);

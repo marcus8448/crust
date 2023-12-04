@@ -252,7 +252,7 @@ Result parse_statement(const char* contents, Token** token, VarList* globals,
         default:
             return failure(*token, "U token");
         }
-        if (operators.len > 0 && ast_precedence(nxt->type) > ast_precedence(
+        if (operators.len > 0 && ast_precedence(nxt->type) >= ast_precedence(
             ((AstNode*)operators.array[operators.len - 1])->type))
         {
             int valI = values.len - 1;

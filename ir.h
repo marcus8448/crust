@@ -14,13 +14,14 @@ typedef enum
 
 typedef enum
 {
-    Byte,
     // 8bit
-    Word,
+    Byte,
     // 16bit
-    Long,
+    Word,
     // 32bit
-    Quad // 64bit
+    Long,
+    // 64bit
+    Quad
 } Size;
 
 typedef struct

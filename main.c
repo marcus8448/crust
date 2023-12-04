@@ -74,11 +74,10 @@ void print_error(const char* section, const Result result, const FileData file)
     }
     printf("%s error at %s[%i:%i]\n", section, file.filename, line, result.failure->index - lineStart);
     printf("%.*s\n"
-           "%*s%.*s\n", lineLen, file.contents + lineStart, result.failure->index - lineStart, "", result.failure->len,
+           "%*s%.*s\n", lineLen, file.contents + lineStart, result.failure->index - lineStart, "", result.failure->len + 1,
            "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
-    printf("%*s'%.*s': %s\n", result.failure->index - lineStart, "", result.failure->len,
-           file.contents + result.failure->index,
-           result.reason);
+    printf("%*s'%.*s': %s\n", result.failure->index - lineStart, "", result.failure->len + 1,
+           file.contents + result.failure->index, result.reason);
 }
 
 Result parse_function(const char* contents, Function* function, VarList* globals, FunctionList* functions,
@@ -229,7 +228,10 @@ Result parse_scope(const char* contents, Token** token, StackFrame* frame, VarLi
                 {
                     AstNode node;
                     token_matches(*token, token_equals_assign);
+                    *token = (*token)->next;
                     forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
+                    ValueRef* node_allocation = solve_node_allocation(contents, frame, globals, functions, literals, &node, output);
+                    stackframe_allocate_variable_from(frame, node_allocation, variable, output);
                 }
                 break;
             }
@@ -355,7 +357,7 @@ ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList
     switch (node->type)
     {
     case op_nop:
-        return NULL;
+        exit(112);
     case op_function:
         break;
     case op_array_index:
@@ -432,9 +434,15 @@ ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList
             alloc->repr = refr;
             return alloc;
         }
-        break;
     case op_value_variable:
-        return stackframe_get_id(frame, contents, node->token);
+        {
+            ValueRef* ref = stackframe_get_id(frame, contents, node->token);
+            if (ref == NULL)
+            {
+                exit(99);
+            }
+            return ref;
+        }
     };
     //     bool paren = (*token)->type == token_opening_paren;
     //     bool dualOp = false;

@@ -156,6 +156,45 @@ void stackframe_allocate_temporary_from(StackFrame* frame, ValueRef** maybe_temp
     }
 }
 
+ValueRef* stackframe_allocate_variable_from(StackFrame* frame, ValueRef* value, Variable variable, FILE* output)
+{
+    switch (value->type)
+    {
+    case ref_temporary:
+        {
+            value->variable = variable;
+            value->type = ref_variable;
+            return value;
+        }
+    case ref_constant:
+        {
+            ValueRef* temp = stackframe_allocate(frame, variable);
+            temp->reg = stackframe_make_register_available(frame, output);
+            frame->activeRegisters[temp->reg] = true;
+
+            char* mnemonicN = allocation_mnemonic(temp);
+            char* mnemonicL = allocation_mnemonic(value);
+            fprintf(output, "mov%c %s, %s # store variable %s \n", get_suffix(typekind_size(variable.type.kind)), mnemonicL, mnemonicN, variable.name); //TODO
+            free(mnemonicL);
+            free(mnemonicN);
+            stackframe_free_ref(frame, value);
+            return temp;
+        }
+    case ref_variable:
+        {
+            ValueRef* temp = stackframe_allocate(frame, variable);
+
+            char* mnemonicN = allocation_mnemonic(temp);
+            char* mnemonicL = allocation_mnemonic(value);
+            fprintf(output, "mov%c %s, %s\n # copy variable %s into %s", get_suffix(typekind_size(variable.type.kind)), mnemonicL, mnemonicN, value->variable.name, variable.name); //TODO
+            free(mnemonicL);
+            free(mnemonicN);
+            return temp;
+        }
+    }
+    exit(53);
+}
+
 void stackframe_free_ref(StackFrame* frame, ValueRef* ref)
 {
     switch (ref->type)
