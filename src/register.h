@@ -7,8 +7,8 @@
 #include "types.h"
 
 enum RegisterFP {
-  xmm0 = 16,
   // don't overlap with normal registers
+  xmm0 = 16,
   xmm1,
   xmm2,
   xmm3,
@@ -133,6 +133,7 @@ void stackframe_init(StackFrame* frame, const StackFrame* parent);
 ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, Variable variable, char reg, FILE* output);
 ValueRef* stackframe_allocate(StackFrame* frame, Variable variable);
 ValueRef* stackframe_allocate_temporary(StackFrame* frame, Type type, FILE* output);
+ValueRef* stackframe_allocate_temporary_reg(StackFrame* frame, Type type, char reg, FILE* output);
 void stackframe_allocate_temporary_from(StackFrame* frame, ValueRef** maybe_temp, FILE* output);
 ValueRef* stackframe_allocate_variable_from(StackFrame* frame, ValueRef* value, Variable variable, FILE* file);
 void stackframe_free_ref(StackFrame* frame, ValueRef* ref);
@@ -142,6 +143,7 @@ ValueRef* stackframe_get_by_token(const StackFrame* frame, const char* contents,
 char* allocation_mnemonic(const ValueRef* alloc);
 char* stackframe_mnemonic(StackFrame* frame, Variable variable);
 char stackframe_make_register_available(StackFrame* frame, FILE* output);
+void stackframe_force_move_register(StackFrame* frame, char reg, FILE* output);
 void stackframe_load_arguments(StackFrame* frame, const Function* function);
 void stackframe_moveto_register(StackFrame* frame, ValueRef* alloc, FILE* output);
 void stackframe_force_into_register(StackFrame* frame, ValueRef* alloc, char reg, FILE* output);

@@ -180,6 +180,7 @@ Result parse_scope(const char* contents, const Token** token, StackFrame* frame,
   assert(contents != NULL);
   token_matches(*token, token_opening_curly_brace);
   while ((*token)->next != NULL) {
+    int deref = 0;
     switch ((*token = (*token)->next)->type) {
     case token_closing_curly_brace: {
       fputs("ret\n", output);
@@ -211,6 +212,12 @@ Result parse_scope(const char* contents, const Token** token, StackFrame* frame,
         stackframe_allocate_variable_from(frame, node_allocation, variable, output);
       }
       break;
+    }
+    case token_asterik: {
+      while ((*token)->type == token_asterik) {
+        deref++;
+        *token = (*token)->next;
+      }
     }
     case token_identifier: {
       char* name = token_copy(*token, contents);
@@ -320,19 +327,55 @@ ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList
     exit(112);
   case op_function:
     break;
-  case op_array_index:
-    break;
-  case op_comma:
-    stackframe_free_ref(frame, solve_node_allocation(contents, frame, globals, functions, literals, node->left, file));
+  case op_array_index: {
+    ValueRef* array = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    ValueRef* index = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+    //todo
+    return array;
+  }
+  case op_comma: {
+    ValueRef* ref = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    if (ref->type == ref_constant || ref->type == ref_temporary) stackframe_free_ref(frame, ref);
     return solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+  }
   case op_unary_negate:
     return unarry_op(contents, "neg", frame, globals, functions, literals, node, file);
   case op_unary_plus:
     return solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
-  case op_unary_addressof:
-    break;
-  case op_unary_derefernce:
-    break;
+  case op_unary_addressof: {
+    ValueRef* node_allocation = solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
+    if (node_allocation->type != ref_variable) {
+      exit(26);
+    }
+
+    Type type;
+    type.kind = ptr;
+    type.inner = &node_allocation->value_type;
+    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
+
+    stackframe_moveto_stack(frame, node_allocation, file);
+
+    char* mnemonicL = allocation_mnemonic(temp);
+    char* mnemonicR = allocation_mnemonic(node_allocation);
+    fprintf(file, "lea%c %s, %s\n", get_suffix(Quad), mnemonicR, mnemonicL); //todo: ptr always quad?
+    free(mnemonicL);
+    free(mnemonicR);
+    return temp;
+  }
+  case op_unary_derefernce: {
+    ValueRef* node_allocation = solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
+    if (node_allocation->value_type.kind != ptr) {
+      exit(27);
+    }
+
+    ValueRef* temp = stackframe_allocate_temporary(frame, *node_allocation->value_type.inner, file);
+    char* mnemonicL = allocation_mnemonic(temp);
+    char* mnemonicR = allocation_mnemonic(node_allocation);
+    fprintf(file, "mov%c (%s), %s\n", get_suffix(typekind_width(temp->value_type.kind)), mnemonicR, mnemonicL);
+    free(mnemonicL);
+    free(mnemonicR);
+    return temp;
+  }
   case op_unary_not:
     break;
   case op_unary_bitwise_not:
@@ -345,42 +388,170 @@ ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList
     return simple_op(contents, "imul", frame, globals, functions, literals, node, file);
   case op_divide:
     // fixme div is not simple
-    break;
+      break;
   case op_modulo:
     // fixme div is not simple
-    break;
+      break;
   case op_bitwise_or:
     return simple_op(contents, "or", frame, globals, functions, literals, node, file);
   case op_bitwise_xor:
     return simple_op(contents, "xor", frame, globals, functions, literals, node, file);
   case op_bitwise_and:
     return simple_op(contents, "and", frame, globals, functions, literals, node, file);
-  case op_assignment:
+  case op_assignment: {
+    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+    if (left->type == ref_constant) {
+      exit(28);
+    }
+
+    char* mnemonicL = allocation_mnemonic(left);
+    char* mnemonicR = allocation_mnemonic(right);
+    fprintf(file, "mov%c %s, %s\n # assignment to %s", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL, left->name);
+    free(mnemonicL);
+    free(mnemonicR);
+    stackframe_free_ref(frame, left);
+    stackframe_free_ref(frame, right);
+    return left;
+  }
+  case op_and: {
     break;
-  case op_and:
+  }
+  case op_or: {
     break;
-  case op_or:
-    break;
+  }
   case op_deref_member_access:
     break;
   case op_member_access:
     break;
   case op_bitwise_left_shift:
-    break;
+    return simple_op(contents, "sal", frame, globals, functions, literals, node, file);
   case op_bitwise_right_shift:
-    break;
-  case op_compare_equals:
-    break;
-  case op_compare_not_equals:
-    break;
-  case op_less_than:
-    break;
-  case op_greater_than:
-    break;
-  case op_less_than_equal:
-    break;
-  case op_greater_than_equal: {
-  } break;
+    return simple_op(contents, "sar", frame, globals, functions, literals, node, file);
+  case op_compare_equals: {
+    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+
+    stackframe_force_move_register(frame, al, file);
+
+    char* mnemonicL = allocation_mnemonic(left);
+    char* mnemonicR = allocation_mnemonic(right);
+    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
+    fputs("sete %al\n", file);
+    free(mnemonicL);
+    free(mnemonicR);
+    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
+    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
+    Type type;
+    type.kind = i8;
+    type.inner = NULL;
+    return stackframe_allocate_temporary_reg(frame, type, al, file);
+  }
+  case op_compare_not_equals: {
+    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+
+    stackframe_force_move_register(frame, rax, file);
+
+    char* mnemonicL = allocation_mnemonic(left);
+    char* mnemonicR = allocation_mnemonic(right);
+    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
+    fputs("setne %al\n", file);
+    free(mnemonicL);
+    free(mnemonicR);
+    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
+    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
+    Type type;
+    type.kind = i8;
+    type.inner = NULL;
+    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
+    stackframe_set_register(frame, temp, al);
+    return temp;
+  }
+  case op_less_than: {
+    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+
+    stackframe_force_move_register(frame, rax, file);
+
+    char* mnemonicL = allocation_mnemonic(left);
+    char* mnemonicR = allocation_mnemonic(right);
+    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
+    fputs("setl %al\n", file);
+    free(mnemonicL);
+    free(mnemonicR);
+    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
+    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
+    Type type;
+    type.kind = i8;
+    type.inner = NULL;
+    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
+    stackframe_set_register(frame, temp, al);
+    return temp;
+  }
+  case op_greater_than: {
+    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+
+    stackframe_force_move_register(frame, rax, file);
+
+    char* mnemonicL = allocation_mnemonic(left);
+    char* mnemonicR = allocation_mnemonic(right);
+    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
+    fputs("setg %al\n", file);
+    free(mnemonicL);
+    free(mnemonicR);
+    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
+    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
+    Type type;
+    type.kind = i8;
+    type.inner = NULL;
+    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
+    stackframe_set_register(frame, temp, al);
+    return temp;
+  }
+  case op_less_than_equal: {
+    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+
+    stackframe_force_move_register(frame, rax, file);
+
+    char* mnemonicL = allocation_mnemonic(left);
+    char* mnemonicR = allocation_mnemonic(right);
+    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
+    fputs("setle %al\n", file);
+    free(mnemonicL);
+    free(mnemonicR);
+    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
+    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
+    Type type;
+    type.kind = i8;
+    type.inner = NULL;
+    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
+    stackframe_set_register(frame, temp, al);
+    return temp;
+  }
+  case op_greater_than_equal:  {
+    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
+    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
+
+    stackframe_force_move_register(frame, rax, file);
+
+    char* mnemonicL = allocation_mnemonic(left);
+    char* mnemonicR = allocation_mnemonic(right);
+    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
+    fputs("setge %al\n", file);
+    free(mnemonicL);
+    free(mnemonicR);
+    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
+    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
+    Type type;
+    type.kind = i8;
+    type.inner = NULL;
+    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
+    stackframe_set_register(frame, temp, al);
+    return temp;
+  }
   case op_value_constant: {
     ValueRef* alloc = malloc(sizeof(ValueRef));
     alloc->type = ref_constant;
@@ -414,7 +585,7 @@ ValueRef* simple_op(const char* contents, const char* op, StackFrame* frame, Var
   char* mnemonicL = allocation_mnemonic(left);
   char* mnemonicR = allocation_mnemonic(right);
   fprintf(file, "%s%c %s, %s\n", op, get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
-  stackframe_free_ref(frame, right);
+  if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
   free(mnemonicL);
   free(mnemonicR);
   return left;

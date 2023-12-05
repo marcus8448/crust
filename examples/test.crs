@@ -1,0 +1,15 @@
+let x: i64;
+let y: i32 = 123;
+let z: i8 = 4;
+
+extern fn printf(str: [i8], value: i8);
+
+fn main() -> i64 {
+    let x: i64 = 13;
+    let y: i64 = x + 5;
+    //let z: [i64] = &x;
+
+    //*z = 5;
+
+    return x;
+}

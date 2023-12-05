@@ -111,6 +111,14 @@ ValueRef* stackframe_allocate_temporary(StackFrame* frame, Type type, FILE* outp
   return &frame->allocations.array[frame->allocations.len - 1];
 }
 
+ValueRef* stackframe_allocate_temporary_reg(StackFrame* frame, Type type, char reg, FILE* output) {
+  ValueRef ref;
+  ref_init_temp(&ref, type);
+  stackframe_set_register(frame, &ref, reg);
+  stackalloclist_add(&frame->allocations, ref);
+  return &frame->allocations.array[frame->allocations.len - 1];
+}
+
 void stackframe_allocate_temporary_from(StackFrame* frame, ValueRef** maybe_temp, FILE* output) {
   switch ((*maybe_temp)->type) {
   case ref_temporary:
@@ -267,6 +275,30 @@ char stackframe_make_register_available(StackFrame* frame, FILE* output) {
       frame->activeRegisters[alloc.reg] = false;
       alloc.reg = -1;
       return i;
+    }
+  }
+  // impossible
+  abort();
+}
+
+void stackframe_force_move_register(StackFrame* frame, const char reg, FILE* output) {
+  if (!frame->activeRegisters[reg]) return;
+
+  for (int i = 0; i < frame->allocations.len; i++) {
+    ValueRef alloc = frame->allocations.array[i];
+    if (alloc.type != ref_constant && alloc.reg == reg) {
+      const Width size = typekind_width(alloc.value_type.kind);
+      if (!alloc.on_stack) {
+        alloc.on_stack = true;
+        frame->curOffset -= size_bytes(size);
+        alloc.offset = frame->curOffset;
+      }
+      fprintf(output, "mov%c %s, %i(%s)\n", get_suffix(size), get_register_mnemonic(size, alloc.reg), alloc.offset,
+              "%rbp");
+
+      frame->activeRegisters[alloc.reg] = false;
+      alloc.reg = -1;
+      return;
     }
   }
   // impossible

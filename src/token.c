@@ -192,7 +192,7 @@ bool tokenize(const char* data, const size_t len, Token* head) {
       break;
     }
     case comment_nl: {
-      if (last == '*' && c == '/') {
+      if (c == '\n') {
         mode = any;
       }
       break;
