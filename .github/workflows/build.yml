@@ -1,0 +1,25 @@
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    permissions:
+      security-events: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: c
+
+      - name: Configure CMake
+        run: cmake -DCMAKE_BUILD_TYPE=Release -B build
+
+      - name: Build with CMake
+        run: cmake --build build/
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
