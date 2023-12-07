@@ -4,14 +4,18 @@
 
 Width typekind_width(const TypeKind kind) {
   switch (kind) {
+  case u8:
   case i8:
     return Byte;
+  case u16:
   case i16:
     return Word;
+  case u32:
   case i32:
     return Long;
-  case ptr:
+  case u64:
   case i64:
+  case ptr:
     return Quad;
   case f32:
     return Long;
@@ -70,12 +74,20 @@ Result parse_type(const char* contents, const Token** token, Type* type) {
       token_matches(*token, token_identifier);
       type->inner = NULL;
 
-      if (token_value_compare(*token, contents, "i64")) {
+      if (token_value_compare(*token, contents, "u64")) {
+        type->kind = u64;
+      } else if (token_value_compare(*token, contents, "i64")) {
         type->kind = i64;
+      } else if (token_value_compare(*token, contents, "u32")) {
+        type->kind = u32;
       } else if (token_value_compare(*token, contents, "i32")) {
         type->kind = i32;
+      } else if (token_value_compare(*token, contents, "u16")) {
+        type->kind = u16;
       } else if (token_value_compare(*token, contents, "i16")) {
         type->kind = i16;
+      } else if (token_value_compare(*token, contents, "u8")) {
+        type->kind = u8;
       } else if (token_value_compare(*token, contents, "i8") || token_value_compare(*token, contents, "char")) {
         type->kind = i8;
       } else if (token_value_compare(*token, contents, "f64")) {

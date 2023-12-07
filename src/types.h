@@ -1,18 +1,33 @@
 #ifndef TYPES_H
 #define TYPES_H
-#include "ir.h"
 #include "token.h"
 
 typedef enum {
-  i8 = 0b000001,
-  i16 = 0b000010,
-  i32 = 0b000100,
-  i64 = 0b001000,
+  // 8bit
+  Byte,
+  // 16bit
+  Word,
+  // 32bit
+  Long,
+  // 64bit
+  Quad
+} Width;
 
-  f32 = 0b010100,
-  f64 = 0b011000,
+typedef enum {
+  i8,
+  i16,
+  i32,
+  i64,
 
-  ptr = 0b101000,
+  u8,
+  u16,
+  u32,
+  u64,
+
+  f32,
+  f64,
+
+  ptr
 } TypeKind;
 
 typedef struct Type {
@@ -20,6 +35,11 @@ typedef struct Type {
 
   union {
     struct Type* inner; // only valid with PTR
+
+    struct {
+      struct Type* members;
+      int len;
+    };
   };
 } Type;
 

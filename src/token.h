@@ -75,6 +75,7 @@ typedef enum {
   token_keyword_fn,
   token_keyword_let,
   token_keyword_extern,
+  token_keyword_as,
 
   token_identifier,
   token_constant,

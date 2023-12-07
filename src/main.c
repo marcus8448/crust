@@ -11,11 +11,6 @@
 #include "struct/list.h"
 #include "token.h"
 
-// strdup is fine in C23
-#ifdef _MSC_VER
-#define strdup _strdup
-#endif
-
 typedef struct {
   const char* filename;
   char* contents;
@@ -552,7 +547,7 @@ ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList
     stackframe_set_register(frame, temp, al);
     return temp;
   }
-  case op_value_constant: {
+  case op_value_constant: { //todo string literals
     ValueRef* alloc = malloc(sizeof(ValueRef));
     alloc->type = ref_constant;
     alloc->value_type.kind = i64; // fixme
@@ -571,6 +566,8 @@ ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList
     }
     return ref;
   }
+  case op_cast:
+    break;
   };
   exit(23);
 }

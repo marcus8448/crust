@@ -125,6 +125,8 @@ int ast_precedence(AstNodeType type) {
     return -1;
   case op_nop:
     return -1;
+  case op_cast: //todo
+    break;
   }
   exit(17);
 }
@@ -326,6 +328,9 @@ Result parse_value(const char* contents, const Token** token, VarList* globals, 
     break;
   case token_string:
     node->type = op_value_constant;
+    break;
+  case token_keyword_as:
+    node->type = op_cast;
     break;
   // case token_cf_if:
   //     break;

@@ -96,6 +96,9 @@ typedef enum {
   // >=
   op_greater_than_equal,
 
+  // _ as TYPE
+  op_cast,
+
   // <number>
   op_value_constant,
   // <identifier>
