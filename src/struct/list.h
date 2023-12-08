@@ -13,8 +13,10 @@
                                                                                                                        \
   void prefix##list_init(name##List* list, const int capacity);                                                        \
   void prefix##list_add(name##List* list, type value);                                                                 \
+  type* prefix##list_grow(name##List* list);                                                                           \
   void prefix##list_remove(name##List* list, int index);                                                               \
   type prefix##list_get(const name##List* list, int index);
+
 #define LIST_IMPL(name, prefix, type)                                                                                  \
   void prefix##list_init(name##List* list, const int capacity) {                                                       \
     list->array = malloc(sizeof(type) * capacity);                                                                     \
@@ -31,6 +33,17 @@
       list->array = alloc;                                                                                             \
     }                                                                                                                  \
     list->array[list->len++] = value;                                                                                  \
+  }                                                                                                                    \
+                                                                                                                       \
+  type* prefix##list_grow(name##List* list) {                                                                          \
+    if (list->len == list->capacity) {                                                                                 \
+      list->capacity *= 2;                                                                                             \
+      void* alloc = realloc(list->array, list->capacity * sizeof(type));                                               \
+      if (alloc == NULL)                                                                                               \
+        abort();                                                                                                       \
+      list->array = alloc;                                                                                             \
+    }                                                                                                                  \
+    return &list->array[list->len++];                                                                                  \
   }                                                                                                                    \
                                                                                                                        \
   void prefix##list_remove(name##List* list, const int index) {                                                        \

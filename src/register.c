@@ -241,9 +241,9 @@ char* allocation_mnemonic(const ValueRef* alloc) {
 
   assert(alloc->on_stack);
   int len = snprintf(NULL, 0, "%i(%%rbp)", alloc->offset);
-  char* mnemonic = malloc(len + 1);
-  snprintf(mnemonic, len, "%i(%%rbp)", alloc->offset);
-  mnemonic[len] = '\0';
+  char* mnemonic = malloc(len + 2);
+  snprintf(mnemonic, len + 1, "%i(%%rbp)", alloc->offset);
+  mnemonic[len + 1] = '\0';
   return mnemonic;
 }
 
@@ -376,6 +376,7 @@ void stackframe_moveto_stack(StackFrame* frame, ValueRef* ref, FILE* output) {
   }
 
   if (ref->reg != -1) {
+    frame->activeRegisters[ref->reg] = false;
     fprintf(output, "mov%c %s, %i(%%rbp) # store variable '%s' to stack\n", get_suffix(size),
             get_register_mnemonic(size, ref->reg), ref->offset, ref->name);
   }

@@ -125,6 +125,8 @@ int ast_precedence(AstNodeType type) {
     return -1;
   case op_nop:
     return -1;
+  case op_cast:
+    return 1;
   }
   exit(17);
 }
@@ -327,6 +329,9 @@ Result parse_value(const char* contents, const Token** token, VarList* globals, 
   case token_string:
     node->type = op_value_constant;
     break;
+  case token_keyword_as:
+    node->type = op_cast;
+    break;
   // case token_cf_if:
   //     break;
   // case token_cf_else:
@@ -336,8 +341,20 @@ Result parse_value(const char* contents, const Token** token, VarList* globals, 
   default:
     return failure(*token, "unkon");
   }
-  node->val_type.kind = i64;   // FIXME;
-  node->val_type.inner = NULL; // FIXME;
+
+  if ((*token)->next->type == token_keyword_as) {
+    *token = (*token)->next;
+    AstNode* node1 = malloc(sizeof(AstNode));
+    *node1 = *node;
+    node->token = *token;
+    *token = (*token)->next;
+    Type type;
+    parse_type(contents, token, &type);
+
+    node->val_type = type;
+    node->type = op_cast;
+    node->inner = node1;
+  }
   return success();
 }
 

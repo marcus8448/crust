@@ -4,16 +4,12 @@ project(crust C)
 set(CMAKE_C_STANDARD 17)
 
 add_executable(crust src/main.c
+        src/struct/list.c
         src/struct/list.h
         src/token.h
         src/token.c
-        src/struct/list.c
         src/ast.c
         src/ast.h
-        src/struct/linkedlist.c
-        src/struct/linkedlist.h
-        src/struct/stack.c
-        src/struct/stack.h
         src/preprocess.h
         src/preprocess.c
         src/register.c
@@ -37,4 +33,7 @@ endif()
 
 find_program(ClangTidy clang-tidy)
 
-target_compile_definitions(crust PRIVATE _CRT_SECURE_NO_WARNINGS)
+if (WIN32)
+    target_compile_definitions(crust PRIVATE _CRT_SECURE_NO_WARNINGS strdup=_strdup)
+endif()
+
