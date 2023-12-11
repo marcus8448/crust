@@ -18,6 +18,7 @@ add_executable(crust src/main.c
         src/types.h
         src/ir.c
         src/ir.h
+        src/util.h
 )
 
 get_target_property(SOURCE_FILES crust SOURCES)

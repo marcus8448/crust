@@ -375,6 +375,7 @@ void token_copy_to(const Token* token, const char* contents, char* output) {
 }
 
 int token_str_cmp(const Token* token, const char* contents, const char* cmp) {
+  if (cmp == NULL) return -1;
   return strncmp(contents + token->index, cmp, token->len);
 }
 
