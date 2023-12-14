@@ -6,6 +6,8 @@
 #include "struct/list.h"
 #include "types.h"
 
+#include <stdint.h>
+
 enum RegisterFP {
   // don't overlap with normal registers
   xmm0 = 16,
@@ -154,7 +156,7 @@ void stackframe_set_register(StackFrame* frame, ValueRef* ref, char reg);
 void stackframe_moveto_register_v(StackFrame* frame, Variable variable, FILE* output);
 void stackframe_free(const StackFrame* frame, FILE* output);
 
-const char* get_register_mnemonic(Width size, int index);
+const char* get_register_mnemonic(Width size, uint8_t index);
 
 char ref_get_register(const ValueRef* ref);
 void ref_init_var(ValueRef* ref, Variable variable);

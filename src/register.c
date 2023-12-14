@@ -1,5 +1,6 @@
 #include "register.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -428,7 +429,7 @@ void ref_init_temp(ValueRef* ref, Type type) {
   ref->offset = 0;
 }
 
-const char* get_register_mnemonic(const Width size, const int index) {
+const char* get_register_mnemonic(const Width size, const uint8_t index) {
   switch (size) {
   case Quad:
     return mnemonic64[index];

@@ -36,6 +36,7 @@ int size_bytes(const Width size) {
   case Quad:
     return 8;
   }
+  return 8;
   exit(5);
 }
 

@@ -21,10 +21,11 @@ typedef enum {
   Dereference,
   ConstantI,
   ConstantS
-} ReferenceType;
+} AccessType;
 
 typedef struct Reference {
-  ReferenceType type;
+  AccessType access;
+
   union {
     struct Allocation* allocation;
     char* value;
@@ -34,6 +35,7 @@ typedef struct Reference {
 
 typedef struct {
   InitialLocationType location;
+  int start;
   union {
     int8_t reg;
     int16_t offset;
@@ -42,6 +44,7 @@ typedef struct {
 } InitialLocation;
 
 typedef struct Allocation {
+  int index;
   Width width;
   InitialLocation source;
   const char *name; //NULLABLE
@@ -50,9 +53,8 @@ typedef struct Allocation {
   int lastInstr;
 } Allocation;
 
-LIST_API(Allocation, allocation, Allocation);
-
 typedef enum {
+  __unary,
   // unary
   NEG,
 
@@ -66,6 +68,9 @@ typedef enum {
   PUSH,
   POP,
 
+  CALL,
+
+  __binary,
   //binary
   MOV,
   LEA,
@@ -81,12 +86,7 @@ typedef enum {
   SAR,
   CMP,
 
-  TEST,
-
-  //non-instr
-  DEREF,
-
-  CALL
+  TEST
 } InstructionType;
 
 typedef struct {
@@ -100,16 +100,16 @@ LIST_API(Instruction, inst, Instruction);
 
 typedef struct {
   InstructionList instructions;
-  AllocationList allocations;
+  PtrList allocations;
   int stackDepth;
 } InstructionTable;
 
-void allocation_init_from(Allocation *alloc, Type type, Reference from);
-void allocation_init_from_reg(Allocation *alloc, Type type, int8_t reg);
-void allocation_init_from_stack(Allocation *alloc, Type type, int16_t offset);
-void allocation_init(Allocation *alloc, Type type);
+void instructiontable_init(InstructionTable *table, int stackDepth);
 
-void allocate_arguments(InstructionTable* table, const Function* function);
+void table_allocate_arguments(InstructionTable* table, const Function* function);
+void instructiontable_free(InstructionTable* table);
+
+uint8_t get_param_count(InstructionType instruction);
 
 Reference reference_direct(Allocation* allocation);
 Reference reference_deref(Allocation* allocation);
@@ -123,6 +123,8 @@ void instruction_ternary(Instruction* instruction, const InstructionTable *table
 Allocation* table_get_variable_by_token(InstructionTable* table, const char* contents, const Token* token);
 
 Allocation* table_allocate(InstructionTable* table);
+Allocation* table_allocate_variable(InstructionTable* table, Variable variable);
+Allocation* table_allocate_from_variable(InstructionTable* table, Reference ref, Variable variable);
 Allocation* table_allocate_from(InstructionTable* table, Reference ref);
 Allocation* table_allocate_from_register(InstructionTable* table, int8_t reg);
 Allocation* table_allocate_from_stack(InstructionTable* table, int16_t offset);
@@ -136,4 +138,8 @@ typedef struct {
 } Statement;
 
 void statement_init(Statement* statement);
+
+Reference solve_ast_node(const char* contents, InstructionTable* table, VarList* globals,
+                                FunctionList* functions, StrList* literals, AstNode* node);
+
 #endif // IR_H

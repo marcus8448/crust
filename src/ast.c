@@ -251,6 +251,10 @@ Result parse_statement(const char* contents, const Token** token, VarList* globa
     ptrlist_add(&operators, nxt);
     *token = (*token)->next;
   }
+  if (operators.len == 0 && values.len == 0) {
+    node->type = op_nop;
+    return success();
+  }
   return failure(*token, "unexp end of stmt");
 }
 

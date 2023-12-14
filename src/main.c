@@ -6,6 +6,8 @@
 #include <string.h>
 
 #include "ast.h"
+#include "codegen.h"
+#include "ir.h"
 #include "preprocess.h"
 #include "register.h"
 #include "struct/list.h"
@@ -16,15 +18,6 @@ typedef struct {
   char* contents;
   size_t len;
 } FileData;
-
-ValueRef* simple_op(const char* contents, const char* op, StackFrame* frame, VarList* globals, FunctionList* functions,
-                    StrList* literals, AstNode* node, FILE* file);
-
-ValueRef* unarry_op(const char* contents, const char* op, StackFrame* frame, VarList* globals, FunctionList* functions,
-                    StrList* literals, AstNode* node, FILE* file);
-
-ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList* globals, FunctionList* functions,
-                                StrList* literals, AstNode* node, FILE* file);
 
 int filedata_init(FileData* data, const char* filename) {
   FILE* file = fopen(filename, "rb");
@@ -141,36 +134,33 @@ int main(const int argc, char** argv) {
   return 0;
 }
 
-Result parse_scope(const char* contents, const Token** token, StackFrame* frame, VarList* globals, FunctionList* functions,
+Result parse_scope(const char* contents, const Token** token, InstructionTable* table, VarList* globals, FunctionList* functions,
                    StrList* literals, FILE* output);
 
 Result parse_function(const char* contents, Function* function, VarList* globals, FunctionList* functions,
                       StrList* literals, FILE* output) {
   assert(contents != NULL);
   if (function->start != NULL) {
-    StackFrame frame;
-    stackframe_init(&frame, NULL);
+    InstructionTable table;
+    instructiontable_init(&table, 0);
 
     fprintf(output, "%s:\n", function->name);
-    // fputs("pushq %rbp # save frame pointer\n"
-    //       "movq %rsp, %rbp # update frame pointer for this function\n", output);
-
-    stackframe_load_arguments(&frame, function);
+    table_allocate_arguments(&table, function);
     const Token* token = function->start;
-    forward_err(parse_scope(contents, &token, &frame, globals, functions, literals, output));
+    forward_err(parse_scope(contents, &token, &table, globals, functions, literals, output));
+    Registers registers;
 
-    // fputs("popq %rbp # restore frame pointer\n"
-    //       "retq\n", output);
+    registers_init(&registers, &table);
+    generate_statement(&registers, contents, &table, globals, functions, literals, output);
 
-    stackframe_free(&frame, output);
+    instructiontable_free(&table);
   }
   return success();
 }
 
-Result invoke_function(const char* contents, const Token** token, StackFrame* frame, VarList* globals,
-                       FunctionList* functions, Function function, FILE* file);
-
-Result parse_scope(const char* contents, const Token** token, StackFrame* frame, VarList* globals, FunctionList* functions,
+Result invoke_function(const char* contents, const Token** token, InstructionTable* table, VarList* vars, FunctionList* function,
+                    Function file, FILE* output);
+Result parse_scope(const char* contents, const Token** token, InstructionTable* table, VarList* globals, FunctionList* functions,
                    StrList* literals, FILE* output) {
   assert(contents != NULL);
   token_matches(*token, token_opening_curly_brace);
@@ -178,14 +168,14 @@ Result parse_scope(const char* contents, const Token** token, StackFrame* frame,
     int deref = 0;
     switch ((*token = (*token)->next)->type) {
     case token_closing_curly_brace: {
-      fputs("ret\n", output);
       return success();
     }
     case token_keyword_let: {
       Variable variable;
       *token = (*token)->next;
       token_matches(*token, token_identifier);
-      variable.name = token_copy(*token, contents);
+      Token* token1 = *token;
+      variable.name = token_copy(token1, contents);
 
       *token = (*token)->next;
       token_matches(*token, token_colon);
@@ -195,16 +185,24 @@ Result parse_scope(const char* contents, const Token** token, StackFrame* frame,
       variable.type = type;
 
       *token = (*token)->next;
-      if ((*token)->type == token_semicolon) {
-        typekind_width(type.kind);
-        stackframe_allocate(frame, variable);
-      } else {
+      table_allocate_variable(table, variable);
+      if ((*token)->type != token_semicolon) {
         AstNode node;
         token_matches(*token, token_equals_assign);
         *token = (*token)->next;
         forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
-        ValueRef* node_allocation = solve_node_allocation(contents, frame, globals, functions, literals, &node, output);
-        stackframe_allocate_variable_from(frame, node_allocation, variable, output);
+
+        AstNode eq_left;
+        eq_left.type = op_value_variable;
+        eq_left.token = token1;
+        eq_left.val_type = type;
+
+        AstNode eq;
+        eq.type = op_assignment;
+        eq.left = &eq_left;
+        eq.right = &node;
+
+        solve_ast_node(contents, table, globals, functions, literals, &eq);
       }
       break;
     }
@@ -229,7 +227,7 @@ Result parse_scope(const char* contents, const Token** token, StackFrame* frame,
         if (indexof == -1) {
           return failure(*token, "unknown function");
         }
-        forward_err(invoke_function(contents, token, frame, globals, functions, functions->array[indexof], output));
+        forward_err(invoke_function(contents, token, table, globals, functions, functions->array[indexof], output));
       } break;
       default:
         token_matches_ext(*token, token_eof, "invalid id sx");
@@ -261,9 +259,12 @@ Result parse_scope(const char* contents, const Token** token, StackFrame* frame,
       *token = (*token)->next;
       AstNode node;
       forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
-      ValueRef* ref = solve_node_allocation(contents, frame, globals, functions, literals, &node, output);
-      stackframe_force_into_register(frame, ref, rax, output);
-      fputs("ret\n", output);
+      Reference node_allocation = solve_ast_node(contents, table, globals, functions, literals, &node);
+      //todo ret
+      // registers_force_register(registers, node_allocation, rax, output);
+      // generate_statement(registers, contents, table, globals, functions, literals, output);
+      //
+      // fputs("ret\n", output);
       break;
     }
     case token_semicolon:
@@ -276,324 +277,42 @@ Result parse_scope(const char* contents, const Token** token, StackFrame* frame,
   abort();
 }
 
-Result invoke_function(const char* contents, const Token** token, StackFrame* frame, VarList* globals,
-                       FunctionList* functions, const Function function, FILE* file) {
+Result invoke_function(const char* contents, const Token** token, InstructionTable* table, VarList* vars, FunctionList* function,
+                    Function file, FILE* output) {
   token_matches(*token, token_opening_paren);
   *token = (*token)->next;
-  for (int i = 0; i < frame->allocations.len; ++i) {
-    switch (ref_get_register(&frame->allocations.array[i])) {
-    case rax:
-    case rdi:
-    case rsi:
-    case rdx:
-    case rcx:
-    case r8:
-    case r9:
-    case r10:
-    case r11:
-      stackframe_moveto_stack(frame, &frame->allocations.array[i], file);
-      break;
-    default:
-      break;
-    }
-  }
-
-  for (int i = 0; i < function.arguments.len; i++) {
-    AstNode node;
-    forward_err(parse_statement(contents, token, globals, functions, token_closing_paren, &node));
-    if (i < 6) {
-    } else {
-    }
-
-    if (i + 1 == function.arguments.len) {
-      token_matches(*token, token_closing_paren);
-    } else {
-      token_matches(*token, token_comma);
-    }
-  }
-  fprintf(file, "call %s\n", function.name);
+  //FIXME todo
+  // for (int i = 0; i < registers->allocations.len; ++i) {
+  //   switch (ref_get_register(&frame->allocations.array[i])) {
+  //   case rax:
+  //   case rdi:
+  //   case rsi:
+  //   case rdx:
+  //   case rcx:
+  //   case r8:
+  //   case r9:
+  //   case r10:
+  //   case r11:
+  //     stackframe_moveto_stack(frame, &frame->allocations.array[i], file);
+  //     break;
+  //   default:
+  //     break;
+  //   }
+  // }
+  //
+  // for (int i = 0; i < function.arguments.len; i++) {
+  //   AstNode node;
+  //   forward_err(parse_statement(contents, token, globals, functions, token_closing_paren, &node));
+  //   if (i < 6) {
+  //   } else {
+  //   }
+  //
+  //   if (i + 1 == function.arguments.len) {
+  //     token_matches(*token, token_closing_paren);
+  //   } else {
+  //     token_matches(*token, token_comma);
+  //   }
+  // }
+  // fprintf(file, "call %s\n", function.name);
   return success();
-}
-
-ValueRef* solve_node_allocation(const char* contents, StackFrame* frame, VarList* globals, FunctionList* functions,
-                                StrList* literals, AstNode* node, FILE* file) {
-  switch (node->type) {
-  case op_nop:
-    exit(112);
-  case op_function:
-    break;
-  case op_array_index: {
-    ValueRef* array = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-    ValueRef* index = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-    //todo
-    return array;
-  }
-  case op_comma: {
-    ValueRef* ref = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-    if (ref->type == ref_constant || ref->type == ref_temporary) stackframe_free_ref(frame, ref);
-    return solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-  }
-  case op_unary_negate:
-    return unarry_op(contents, "neg", frame, globals, functions, literals, node, file);
-  case op_unary_plus:
-    return solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
-  case op_unary_addressof: {
-    ValueRef* node_allocation = solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
-    if (node_allocation->type != ref_variable) {
-      exit(26);
-    }
-
-    Type type;
-    type.kind = ptr;
-    type.inner = &node_allocation->value_type;
-    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
-
-    stackframe_moveto_stack(frame, node_allocation, file);
-
-    char* mnemonicL = allocation_mnemonic(temp);
-    char* mnemonicR = allocation_mnemonic(node_allocation);
-    fprintf(file, "lea%c %s, %s\n", get_suffix(Quad), mnemonicR, mnemonicL); //todo: ptr always quad?
-    free(mnemonicL);
-    free(mnemonicR);
-    return temp;
-  }
-  case op_unary_derefernce: {
-    ValueRef* node_allocation = solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
-    if (node_allocation->value_type.kind != ptr) {
-      exit(27);
-    }
-
-    ValueRef* temp = stackframe_allocate_temporary(frame, *node_allocation->value_type.inner, file);
-    char* mnemonicL = allocation_mnemonic(temp);
-    char* mnemonicR = allocation_mnemonic(node_allocation);
-    fprintf(file, "mov%c (%s), %s\n", get_suffix(typekind_width(temp->value_type.kind)), mnemonicR, mnemonicL);
-    free(mnemonicL);
-    free(mnemonicR);
-    return temp;
-  }
-  case op_unary_not:
-    break;
-  case op_unary_bitwise_not:
-    return unarry_op(contents, "neg", frame, globals, functions, literals, node, file);
-  case op_add:
-    return simple_op(contents, "add", frame, globals, functions, literals, node, file);
-  case op_subtract:
-    return simple_op(contents, "sub", frame, globals, functions, literals, node, file);
-  case op_multiply: // fixme
-    return simple_op(contents, "imul", frame, globals, functions, literals, node, file);
-  case op_divide:
-    // fixme div is not simple
-      break;
-  case op_modulo:
-    // fixme div is not simple
-      break;
-  case op_bitwise_or:
-    return simple_op(contents, "or", frame, globals, functions, literals, node, file);
-  case op_bitwise_xor:
-    return simple_op(contents, "xor", frame, globals, functions, literals, node, file);
-  case op_bitwise_and:
-    return simple_op(contents, "and", frame, globals, functions, literals, node, file);
-  case op_assignment: {
-    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-    if (left->type == ref_constant) {
-      exit(28);
-    }
-
-    char* mnemonicL = allocation_mnemonic(left);
-    char* mnemonicR = allocation_mnemonic(right);
-    fprintf(file, "mov%c %s, %s\n # assignment to %s", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL, left->name);
-    free(mnemonicL);
-    free(mnemonicR);
-    stackframe_free_ref(frame, left);
-    stackframe_free_ref(frame, right);
-    return left;
-  }
-  case op_and: {
-    break;
-  }
-  case op_or: {
-    break;
-  }
-  case op_deref_member_access:
-    break;
-  case op_member_access:
-    break;
-  case op_bitwise_left_shift:
-    return simple_op(contents, "sal", frame, globals, functions, literals, node, file);
-  case op_bitwise_right_shift:
-    return simple_op(contents, "sar", frame, globals, functions, literals, node, file);
-  case op_compare_equals: {
-    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-
-    stackframe_force_move_register(frame, al, file);
-
-    char* mnemonicL = allocation_mnemonic(left);
-    char* mnemonicR = allocation_mnemonic(right);
-    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
-    fputs("sete %al\n", file);
-    free(mnemonicL);
-    free(mnemonicR);
-    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
-    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
-    Type type;
-    type.kind = i8;
-    type.inner = NULL;
-    return stackframe_allocate_temporary_reg(frame, type, al, file);
-  }
-  case op_compare_not_equals: {
-    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-
-    stackframe_force_move_register(frame, rax, file);
-
-    char* mnemonicL = allocation_mnemonic(left);
-    char* mnemonicR = allocation_mnemonic(right);
-    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
-    fputs("setne %al\n", file);
-    free(mnemonicL);
-    free(mnemonicR);
-    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
-    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
-    Type type;
-    type.kind = i8;
-    type.inner = NULL;
-    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
-    stackframe_set_register(frame, temp, al);
-    return temp;
-  }
-  case op_less_than: {
-    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-
-    stackframe_force_move_register(frame, rax, file);
-
-    char* mnemonicL = allocation_mnemonic(left);
-    char* mnemonicR = allocation_mnemonic(right);
-    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
-    fputs("setl %al\n", file);
-    free(mnemonicL);
-    free(mnemonicR);
-    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
-    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
-    Type type;
-    type.kind = i8;
-    type.inner = NULL;
-    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
-    stackframe_set_register(frame, temp, al);
-    return temp;
-  }
-  case op_greater_than: {
-    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-
-    stackframe_force_move_register(frame, rax, file);
-
-    char* mnemonicL = allocation_mnemonic(left);
-    char* mnemonicR = allocation_mnemonic(right);
-    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
-    fputs("setg %al\n", file);
-    free(mnemonicL);
-    free(mnemonicR);
-    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
-    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
-    Type type;
-    type.kind = i8;
-    type.inner = NULL;
-    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
-    stackframe_set_register(frame, temp, al);
-    return temp;
-  }
-  case op_less_than_equal: {
-    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-
-    stackframe_force_move_register(frame, rax, file);
-
-    char* mnemonicL = allocation_mnemonic(left);
-    char* mnemonicR = allocation_mnemonic(right);
-    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
-    fputs("setle %al\n", file);
-    free(mnemonicL);
-    free(mnemonicR);
-    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
-    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
-    Type type;
-    type.kind = i8;
-    type.inner = NULL;
-    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
-    stackframe_set_register(frame, temp, al);
-    return temp;
-  }
-  case op_greater_than_equal:  {
-    ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-    ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-
-    stackframe_force_move_register(frame, rax, file);
-
-    char* mnemonicL = allocation_mnemonic(left);
-    char* mnemonicR = allocation_mnemonic(right);
-    fprintf(file, "cmp%c %s, %s\n", get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
-    fputs("setge %al\n", file);
-    free(mnemonicL);
-    free(mnemonicR);
-    if (left->type == ref_constant || left->type == ref_temporary) stackframe_free_ref(frame, left);
-    if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
-    Type type;
-    type.kind = i8;
-    type.inner = NULL;
-    ValueRef* temp = stackframe_allocate_temporary(frame, type, file);
-    stackframe_set_register(frame, temp, al);
-    return temp;
-  }
-  case op_value_constant: { //todo string literals
-    ValueRef* alloc = malloc(sizeof(ValueRef));
-    alloc->type = ref_constant;
-    alloc->value_type.kind = i64; // fixme
-    alloc->value_type.inner = NULL;
-    char* refr = malloc(node->token->len + 2);
-    refr[0] = '$';
-    strncpy(refr + 1, contents + node->token->index, node->token->len);
-    refr[node->token->len + 1] = '\0';
-    alloc->repr = refr;
-    return alloc;
-  }
-  case op_value_variable: {
-    ValueRef* ref = stackframe_get_by_token(frame, contents, node->token);
-    if (ref == NULL) {
-      exit(99);
-    }
-    return ref;
-  }
-  case op_cast:
-    break;
-  };
-  exit(23);
-}
-
-ValueRef* simple_op(const char* contents, const char* op, StackFrame* frame, VarList* globals, FunctionList* functions,
-                    StrList* literals, AstNode* node, FILE* file) {
-  ValueRef* left = solve_node_allocation(contents, frame, globals, functions, literals, node->left, file);
-  ValueRef* right = solve_node_allocation(contents, frame, globals, functions, literals, node->right, file);
-
-  stackframe_allocate_temporary_from(frame, &left, file);
-
-  char* mnemonicL = allocation_mnemonic(left);
-  char* mnemonicR = allocation_mnemonic(right);
-  fprintf(file, "%s%c %s, %s\n", op, get_suffix(typekind_width(left->value_type.kind)), mnemonicR, mnemonicL);
-  if (right->type == ref_constant || right->type == ref_temporary) stackframe_free_ref(frame, right);
-  free(mnemonicL);
-  free(mnemonicR);
-  return left;
-}
-
-ValueRef* unarry_op(const char* contents, const char* op, StackFrame* frame, VarList* globals, FunctionList* functions,
-                    StrList* literals, AstNode* node, FILE* file) {
-  ValueRef* ref = solve_node_allocation(contents, frame, globals, functions, literals, node->inner, file);
-  stackframe_allocate_temporary_from(frame, &ref, file);
-  char* mnemonic = allocation_mnemonic(ref);
-  fprintf(file, "%s%c %s\n", op, get_suffix(typekind_width(ref->value_type.kind)), mnemonic);
-  free(mnemonic);
-  return ref;
 }
