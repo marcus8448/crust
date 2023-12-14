@@ -21,6 +21,10 @@ add_executable(crust src/main.c
         src/util.h
         src/codegen.h
         src/codegen.c
+        src/result.c
+        src/result.h
+        src/parse.c
+        src/parse.h
 )
 
 get_target_property(SOURCE_FILES crust SOURCES)
@@ -40,3 +44,7 @@ if (WIN32)
     target_compile_definitions(crust PRIVATE _CRT_SECURE_NO_WARNINGS strdup=_strdup)
 endif()
 
+target_compile_options(crust PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Wno-unused-parameter>
+)

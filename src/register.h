@@ -103,7 +103,7 @@ typedef struct {
   union {
     struct {
       const char* name;
-      char reg;
+      int8_t reg;
       int offset;
       bool on_stack;
     };
@@ -129,13 +129,13 @@ typedef struct {
   StrList strLiterals;
 } Globals;
 
-char get_suffix(Width size);
+char mnemonic_suffix(Width size);
 
 void stackframe_init(StackFrame* frame, const StackFrame* parent);
-ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, Variable variable, char reg, FILE* output);
+ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, Variable variable, int8_t reg, FILE* output);
 ValueRef* stackframe_allocate(StackFrame* frame, Variable variable);
 ValueRef* stackframe_allocate_temporary(StackFrame* frame, Type type, FILE* output);
-ValueRef* stackframe_allocate_temporary_reg(StackFrame* frame, Type type, char reg, FILE* output);
+ValueRef* stackframe_allocate_temporary_reg(StackFrame* frame, Type type, int8_t reg, FILE* output);
 void stackframe_allocate_temporary_from(StackFrame* frame, ValueRef** maybe_temp, FILE* output);
 ValueRef* stackframe_allocate_variable_from(StackFrame* frame, ValueRef* value, Variable variable, FILE* file);
 void stackframe_free_ref(StackFrame* frame, ValueRef* ref);
@@ -145,13 +145,13 @@ ValueRef* stackframe_get_by_token(const StackFrame* frame, const char* contents,
 char* allocation_mnemonic(const ValueRef* alloc);
 char* stackframe_mnemonic(StackFrame* frame, Variable variable);
 char stackframe_make_register_available(StackFrame* frame, FILE* output);
-void stackframe_force_move_register(StackFrame* frame, char reg, FILE* output);
+void stackframe_force_move_register(StackFrame* frame, int8_t reg, FILE* output);
 void stackframe_load_arguments(StackFrame* frame, const Function* function);
 void stackframe_moveto_register(StackFrame* frame, ValueRef* alloc, FILE* output);
-void stackframe_force_into_register(StackFrame* frame, ValueRef* alloc, char reg, FILE* output);
-void stackframe_set_or_copy_register(StackFrame* frame, ValueRef* ref, char reg, FILE* output);
+void stackframe_force_into_register(StackFrame* frame, ValueRef* alloc, int8_t reg, FILE* output);
+void stackframe_set_or_copy_register(StackFrame* frame, ValueRef* ref, int8_t reg, FILE* output);
 void stackframe_moveto_stack(StackFrame* frame, ValueRef* ref, FILE* output);
-void stackframe_set_register(StackFrame* frame, ValueRef* ref, char reg);
+void stackframe_set_register(StackFrame* frame, ValueRef* ref, int8_t reg);
 
 void stackframe_moveto_register_v(StackFrame* frame, Variable variable, FILE* output);
 void stackframe_free(const StackFrame* frame, FILE* output);

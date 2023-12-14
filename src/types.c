@@ -1,6 +1,13 @@
 #include "types.h"
 
 #include <stdlib.h>
+Width type_width(Type type) {
+  return typekind_width(type.kind);
+}
+
+int type_size(Type type) {
+  return typekind_size(type.kind);
+}
 
 Width typekind_width(const TypeKind kind) {
   switch (kind) {
@@ -25,6 +32,10 @@ Width typekind_width(const TypeKind kind) {
   assert(false);
 }
 
+int typekind_size(TypeKind type) {
+  return size_bytes(typekind_width(type));
+}
+
 int size_bytes(const Width size) {
   switch (size) {
   case Byte:
@@ -36,7 +47,6 @@ int size_bytes(const Width size) {
   case Quad:
     return 8;
   }
-  return 8;
   exit(5);
 }
 

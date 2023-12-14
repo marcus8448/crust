@@ -1,5 +1,6 @@
 #ifndef TYPES_H
 #define TYPES_H
+#include "result.h"
 #include "token.h"
 
 typedef enum {
@@ -35,17 +36,16 @@ typedef struct Type {
 
   union {
     struct Type* inner; // only valid with PTR
-
-    struct {
-      struct Type* members;
-      int len;
-    };
   };
 } Type;
 
 Result parse_type(const char* contents, const Token** token, Type* type);
 
-Width typekind_width(TypeKind kind);
+Width type_width(Type type);
+int type_size(Type type);
+Width typekind_width(TypeKind type);
+int typekind_size(TypeKind type);
+
 int size_bytes(Width size);
 const char* size_mnemonic(Width size);
 

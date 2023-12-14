@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-inline char *format_str(const char* fmt, ...) {
+inline char* format_str(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
   const int len = vsnprintf(NULL, 0, fmt, args);
@@ -15,4 +15,4 @@ inline char *format_str(const char* fmt, ...) {
   return str;
 }
 
-#endif //UTIL_H
+#endif // UTIL_H

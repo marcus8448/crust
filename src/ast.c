@@ -1,8 +1,8 @@
 #include "ast.h"
 #include <string.h>
 
-LIST_IMPL(Var, var, Variable);
-LIST_IMPL(Function, function, Function);
+LIST_IMPL(Var, var, Variable)
+LIST_IMPL(Function, function, Function)
 
 void function_init(Function* function) {
   varlist_init(&function->arguments, 2);
@@ -258,7 +258,8 @@ Result parse_statement(const char* contents, const Token** token, VarList* globa
   return failure(*token, "unexp end of stmt");
 }
 
-Result parse_value(const char* contents, const Token** token, VarList* globals, FunctionList* functions, AstNode* node) {
+Result parse_value(const char* contents, const Token** token, VarList* globals, FunctionList* functions,
+                   AstNode* node) {
   node->token = *token;
 
   switch ((*token)->type) {
@@ -309,7 +310,7 @@ Result parse_value(const char* contents, const Token** token, VarList* globals, 
     case token_opening_paren:
       node->inner = malloc(sizeof(AstNode));
       node->type = op_function;
-      int indexof_tok = functionlist_indexof_tok(functions, contents, *token);
+      const int indexof_tok = functionlist_indexof_tok(functions, contents, *token);
       if (indexof_tok == -1)
         return failure(*token, "unknown funciton");
 

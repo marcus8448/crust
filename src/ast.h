@@ -129,8 +129,8 @@ typedef struct AstNode {
 } AstNode;
 
 Result parse_value(const char* contents, const Token** token, VarList* globals, FunctionList* functions, AstNode* node);
-Result parse_statement(const char* contents, const Token** token, VarList* globals, FunctionList* functions, TokenType until,
-                       AstNode* node);
+Result parse_statement(const char* contents, const Token** token, VarList* globals, FunctionList* functions,
+                       TokenType until, AstNode* node);
 Result parse_args(const char* contents, const Token** token, Function* function, VarList* vars, FunctionList* functions,
                   AstNode* inner);
 

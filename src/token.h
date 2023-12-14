@@ -2,33 +2,6 @@
 #define TOKEN_H
 #include "struct/list.h"
 #include <stdbool.h>
-#include <stddef.h>
-
-#define token_seek_until(token, token_type)                                                                            \
-  while ((token)->next->type != token_type) {                                                                          \
-    token = (token)->next;                                                                                             \
-    if ((token)->type == token_eof) {                                                                                  \
-      token_matches(token, token_type);                                                                                \
-    }                                                                                                                  \
-  }
-#define token_matches(token, token_type)                                                                               \
-  if ((token)->type != token_type) {                                                                                   \
-    return failure(token, "Expected: " #token_type);                                                                   \
-  }
-#define token_matches_ext(token, token_type, def)                                                                      \
-  if ((token)->type != token_type) {                                                                                   \
-    return failure(token, "Expected: " def);                                                                           \
-  }
-
-// https://stackoverflow.com/questions/1597007/creating-c-macro-with-and-line-token-concatenation-with-positioning-macr
-#define __preprocess_concat_internal(x, y) x##y
-#define __preprocess_concat(x, y) __preprocess_concat_internal(x, y)
-
-#define forward_err(function)                                                                                          \
-  Result __preprocess_concat(result, __LINE__) = function;                                                             \
-  if (!successful(__preprocess_concat(result, __LINE__))) {                                                            \
-    return __preprocess_concat(result, __LINE__);                                                                      \
-  }
 
 typedef enum {
   token_eof = '\0',
@@ -103,17 +76,6 @@ typedef struct Token {
   int len;
 } Token;
 
-typedef struct {
-  const Token* failure;
-  const char* reason;
-} Result;
-
-bool successful(Result result);
-
-Result success();
-
-Result failure(const Token* failure, const char* reason);
-
 void token_init(Token* token, TokenType type, int index, int len);
 bool token_value_compare(const Token* token, const char* contents, const char* compare);
 char* token_copy(const Token* token, const char* contents);
@@ -124,5 +86,5 @@ void token_free(Token* token);
 
 bool tokenize(const char* data, size_t len, Token* head);
 
-LIST_API(Token, token, Token);
+LIST_API(Token, token, Token)
 #endif // TOKEN_H

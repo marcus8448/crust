@@ -34,7 +34,7 @@ bool tokenize(const char* data, const size_t len, Token* head) {
   head->prev = NULL;
   head->next = NULL;
 
-  for (int i = 0; i < len; i++) {
+  for (size_t i = 0; i < len; i++) {
     Token* previous = next->prev;
     const int c = data[i];
     if (c == EOF) {
@@ -329,24 +329,6 @@ const char* token_name(const TokenType type) {
   abort();
 }
 
-bool successful(const Result result) {
-  return result.failure == NULL && result.reason == NULL;
-}
-
-Result success() {
-  Result success;
-  success.failure = NULL;
-  success.reason = NULL;
-  return success;
-}
-
-Result failure(const Token* failure, const char* reason) {
-  Result error;
-  error.failure = failure;
-  error.reason = reason;
-  return error;
-}
-
 void token_init(Token* token, const TokenType type, const int index, const int len) {
   token->type = type;
   token->index = index;
@@ -375,7 +357,8 @@ void token_copy_to(const Token* token, const char* contents, char* output) {
 }
 
 int token_str_cmp(const Token* token, const char* contents, const char* cmp) {
-  if (cmp == NULL) return -1;
+  if (cmp == NULL)
+    return -1;
   return strncmp(contents + token->index, cmp, token->len);
 }
 
@@ -393,4 +376,4 @@ void tokens_init(Token* token) {
   token->prev = NULL;
 }
 
-LIST_IMPL(Token, token, Token);
+LIST_IMPL(Token, token, Token)
