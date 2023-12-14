@@ -45,8 +45,6 @@ typedef struct Allocation {
 } Allocation;
 
 typedef enum {
-  __unary,
-  // unary
   NEG,
 
   SETE,
@@ -56,13 +54,9 @@ typedef enum {
   SETLE,
   SETGE,
 
-  PUSH,
-  POP,
+  CALL, //todo
+  RET,
 
-  CALL,
-
-  __binary,
-  // binary
   MOV,
   LEA,
 
@@ -82,8 +76,8 @@ typedef enum {
 
 typedef struct {
   InstructionType type;
-  Reference inputs[3];
-  Allocation* output;
+  Reference inputs[2];
+  Reference output;
   char* comment;
 } Instruction;
 
@@ -100,21 +94,19 @@ void instructiontable_init(InstructionTable* table, int stackDepth);
 void table_allocate_arguments(InstructionTable* table, const Function* function);
 void instructiontable_free(InstructionTable* table);
 
-uint8_t get_param_count(InstructionType instruction);
-
 Reference reference_direct(Allocation* allocation);
 Reference reference_deref(Allocation* allocation);
 
 void instruction_init(Instruction* instruction);
 
-void instruction_unary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
-                       Allocation* output, char* comment);
+void instruction_unary(Instruction* instruction, const InstructionTable* table, InstructionType type,
+                       Reference output, char* comment);
 void instruction_binary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
-                        Reference b, Allocation* output, char* comment);
+                       Reference output, char* comment);
 void instruction_ternary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
-                         Reference b, Reference c, Allocation* output, char* comment);
+                       Reference b, Reference output, char* comment);
 
-Allocation* table_get_variable_by_token(InstructionTable* table, const char* contents, const Token* token);
+Allocation* table_get_variable_by_token(const InstructionTable* table, const char* contents, const Token* token);
 
 Allocation* table_allocate(InstructionTable* table);
 Allocation* table_allocate_infer_type(InstructionTable* table, Reference a, Reference b);

@@ -45,6 +45,6 @@ if (WIN32)
 endif()
 
 target_compile_options(crust PRIVATE
-        $<$<CXX_COMPILER_ID:MSVC>:/W4>
-        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Wno-unused-parameter>
+        $<$<C_COMPILER_ID:MSVC>:/W4>
+        $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Wno-unused-parameter>
 )

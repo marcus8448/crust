@@ -124,11 +124,7 @@ Result parse_scope(const char* contents, const Token** token, InstructionTable* 
       AstNode node;
       forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
       Reference node_allocation = solve_ast_node(contents, table, globals, functions, literals, &node);
-      // todo ret
-      //  registers_force_register(registers, node_allocation, rax, output);
-      //  generate_statement(registers, contents, table, globals, functions, literals, output);
-      //
-      //  fputs("ret\n", output);
+      instruction_unary(table_next(table), table, RET, node_allocation, "Return");
       break;
     }
     case token_semicolon:

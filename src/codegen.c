@@ -4,8 +4,8 @@
 
 #include <string.h>
 
-// no rbp
-int registerPriority[15] = {rbx, rcx, rdx, rsi, rdi, rsp, r8, r9, r10, r11, r12, r13, r14, r15, rax};
+// no rbp, rsp
+uint8_t registerPriority[15] = {rbx, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15, rax};
 
 void registers_init(Registers* registers, InstructionTable* table) {
   for (int i = 0; i < 16; ++i) {
@@ -166,47 +166,63 @@ char* registers_get_mnemonic(const Registers* registers, Reference reference) {
 }
 
 void binary_mov(const char* instr, Registers* registers, Instruction* instruction, int index, FILE* output) {
-  assert(instruction->inputs[1].allocation == instruction->output);
   if (isAllocated(instruction->inputs[0].access) && instruction->inputs[0].allocation->lastInstr == index) {
-    registers_override(registers, instruction->output, instruction->inputs[0].allocation);
+    registers_override(registers, instruction->output.allocation, instruction->inputs[0].allocation);
     return;
   }
   fprintf(output, "%s%c %s, %s\n", instr, 'q', registers_get_mnemonic(registers, instruction->inputs[0]),
-          registers_get_mnemonic(registers, instruction->inputs[1]));
+          registers_get_mnemonic(registers, instruction->output));
+}
+
+void ret_op(const char* instr, Registers* registers, Instruction* instruction, int index, FILE* output) {
+  registers_force_register(registers, instruction->output, rax, output);
+  fputs("ret\n", output);
 }
 
 void binary_self(const char* instr, Registers* registers, Instruction* instruction, int index, FILE* output) {
   int src;
-  bool deref = false;
   if (isAllocated(instruction->inputs[0].access) && instruction->inputs[0].allocation->lastInstr == index) {
-    instruction->output = instruction->inputs[0].allocation;
-    deref = instruction->inputs[0].access == Dereference;
+    instruction->output = instruction->inputs[0];
     src = 1;
   } else if (isAllocated(instruction->inputs[1].access) && instruction->inputs[1].allocation->lastInstr == index) {
-    instruction->output = instruction->inputs[1].allocation;
-    deref = instruction->inputs[1].access == Dereference;
+    instruction->output = instruction->inputs[1];
     src = 0;
   } else {
     fprintf(output, "mov%c %s, %s\n", 'q', registers_get_mnemonic(registers, instruction->inputs[0]),
-            registers_get_mnemonic(registers, reference_direct(instruction->output)));
+            registers_get_mnemonic(registers, instruction->output));
     src = 1;
   }
   fprintf(output, "%s%c %s, %s\n", instr, 'q', registers_get_mnemonic(registers, instruction->inputs[src]),
-          registers_get_mnemonic(registers,
-                                 deref ? reference_deref(instruction->output) : reference_direct(instruction->output)));
+          registers_get_mnemonic(registers, instruction->output));
+}
+
+void ternary_op(const char* instr, Registers* registers, Instruction* instruction, int index, FILE* output) {
+  int src = -1;
+  if (registers_get_storage(registers, instruction->output.allocation)->location == L_None && instruction->output.allocation->source.location == None) {
+    if (isAllocated(instruction->inputs[0].access) && instruction->inputs[0].allocation->lastInstr == index) {
+      instruction->output = instruction->inputs[0];
+      src = 1;
+    } else if (isAllocated(instruction->inputs[1].access) && instruction->inputs[1].allocation->lastInstr == index) {
+      instruction->output = instruction->inputs[1];
+      src = 0;
+    }
+  }
+  if (src == -1) {
+    registers_claim(registers, instruction->output.allocation);
+    fprintf(output, "mov%c %s, %s\n", 'q', registers_get_mnemonic(registers, instruction->inputs[0]),
+        registers_get_mnemonic(registers, instruction->output));
+    src = 1;
+  }
+  fprintf(output, "%s%c %s, %s\n", instr, 'q', registers_get_mnemonic(registers, instruction->inputs[src]),
+          registers_get_mnemonic(registers, instruction->output));
 }
 
 void binary_lea(const char* instr, Registers* registers, Instruction* instruction, int index, FILE* output) {
-  // if (isAllocated(instruction->inputs[0].access) && instruction->inputs[0].allocation->lastInstr == index) {
-  //   instruction->output = instruction->inputs[0].allocation;
-  // } else if (isAllocated(instruction->inputs[1].access) && instruction->inputs[1].allocation->lastInstr == index) {
-  //   instruction->output = instruction->inputs[1].allocation;
-  // } else {
-  //   fprintf(output, "mov%c %s, %s\n", 'q', registers_get_mnemonic(registers, instruction->inputs[0]),
-  //           registers_get_mnemonic(registers, reference_direct(instruction->output)));
-  // }
+  if (registers_get_storage(registers, instruction->output.allocation)->location == L_None) {
+      registers_claim(registers, instruction->output.allocation);
+  }
   fprintf(output, "%s%c %s, %s\n", instr, 'q', registers_get_mnemonic(registers, instruction->inputs[0]),
-          registers_get_mnemonic(registers, reference_direct(instruction->output)));
+          registers_get_mnemonic(registers, instruction->output));
 }
 
 void binary_op(const char* instr, Registers* registers, Instruction* instruction, FILE* output) {
@@ -226,46 +242,51 @@ void binary_op(const char* instr, Registers* registers, Instruction* instruction
 }
 
 void unary_op(const char* instr, Registers* registers, Instruction* instruction, FILE* output) {
-  fprintf(output, "%s %s\n", instr, registers_get_mnemonic(registers, instruction->inputs[0]));
+  if (instruction->inputs[0].allocation != instruction->output.allocation) {
+    fprintf(output, "mov%c %s, %s\n", 'q', registers_get_mnemonic(registers, instruction->inputs[0]),
+            registers_get_mnemonic(registers, instruction->output));
+  }
+
+  fprintf(output, "%s %s\n", instr, registers_get_mnemonic(registers, instruction->output));
 }
 
 void generate_statement(Registers* registers, const char* contents, InstructionTable* table, VarList* globals,
                         FunctionList* functions, StrList* literals, FILE* output) {
   for (int i = 0; i < table->instructions.len; ++i) {
     Instruction* instruction = table->instructions.array + i;
-    switch (instruction->output->source.location) {
+    switch (instruction->output.allocation->source.location) {
 
     case None:
-      registers_claim(registers, instruction->output);
+      registers_claim(registers, instruction->output.allocation);
       break;
     case Stack: {
-      registers_claim_stack(registers, instruction->output, instruction->output->source.offset);
+      registers_claim_stack(registers, instruction->output.allocation, instruction->output.allocation->source.offset);
       break;
     }
     case Register: {
-      if (registers->registers[instruction->output->source.reg]) {
+      if (registers->registers[instruction->output.allocation->source.reg]) {
         Allocation* from_register =
-            registers_allocationfrom_register(registers, table, instruction->output->source.reg);
+            registers_allocationfrom_register(registers, table, instruction->output.allocation->source.reg);
         assert(from_register != NULL);
         if (from_register->lastInstr > i) {
           registers_move_tostack(registers, from_register, output);
         }
       }
-      registers_claim_register(registers, instruction->output, instruction->output->source.reg);
+      registers_claim_register(registers, instruction->output.allocation, instruction->output.allocation->source.reg);
       break;
     }
     case Copy: {
-      if (instruction->output->lastInstr > i) {
-        registers_claim_register(registers, instruction->output, instruction->output->source.reg);
-        fprintf(output, "mov%c %s, %s\n", 'q', registers_get_mnemonic(registers, instruction->output->source.reference),
-                registers_get_mnemonic(registers, reference_direct(instruction->output)));
+      if (instruction->output.allocation->lastInstr > i) {
+        registers_claim_register(registers, instruction->output.allocation, instruction->output.allocation->source.reg);
+        fprintf(output, "mov%c %s, %s\n", 'q', registers_get_mnemonic(registers, instruction->output.allocation->source.reference),
+                registers_get_mnemonic(registers, instruction->output));
       } else {
-        *registers_get_storage(registers, instruction->output) =
-            *registers_get_storage(registers, instruction->output->source.reference.allocation);
-        registers_get_storage(registers, instruction->output->source.reference.allocation)->location = L_None;
-        for (int j = 0; j < 3; ++j) {
-          if (instruction->inputs[j].allocation == instruction->output->source.reference.allocation) {
-            instruction->inputs[j].allocation = instruction->output;
+        *registers_get_storage(registers, instruction->output.allocation) =
+            *registers_get_storage(registers, instruction->output.allocation->source.reference.allocation);
+        registers_get_storage(registers, instruction->output.allocation->source.reference.allocation)->location = L_None;
+        for (int j = 0; j < 2; ++j) {
+          if (instruction->inputs[j].allocation == instruction->output.allocation->source.reference.allocation) {
+            instruction->inputs[j] = instruction->output;
             puts("mov copy to input");
           }
         }
@@ -273,7 +294,7 @@ void generate_statement(Registers* registers, const char* contents, InstructionT
       break;
     }
     }
-    for (int j = 0; j < 3; ++j) {
+    for (int j = 0; j < 2; ++j) {
       const Reference reference = instruction->inputs[j];
 
       switch (reference.access) {
@@ -346,12 +367,6 @@ void generate_statement(Registers* registers, const char* contents, InstructionT
     case SETGE:
       unary_op("setge", registers, instruction, output);
       break;
-    case PUSH:
-      unary_op("push", registers, instruction, output);
-      break;
-    case POP:
-      unary_op("pop", registers, instruction, output);
-      break;
     case CALL:
       unary_op("call", registers, instruction, output);
       break;
@@ -363,37 +378,40 @@ void generate_statement(Registers* registers, const char* contents, InstructionT
       binary_lea("lea", registers, instruction, i, output);
       break;
     case ADD:
-      binary_self("add", registers, instruction, i, output);
+      ternary_op("add", registers, instruction, i, output);
       break;
     case SUB:
-      binary_self("sub", registers, instruction, i, output);
+      ternary_op("sub", registers, instruction, i, output);
       break;
     case IMUL:
-      binary_self("imul", registers, instruction, i, output);
+      ternary_op("imul", registers, instruction, i, output);
       break;
     case OR:
-      binary_self("or", registers, instruction, i, output);
+      ternary_op("or", registers, instruction, i, output);
       break;
     case XOR:
-      binary_self("xor", registers, instruction, i, output);
+      ternary_op("xor", registers, instruction, i, output);
       break;
     case AND:
-      binary_self("and", registers, instruction, i, output);
+      ternary_op("and", registers, instruction, i, output);
       break;
     case NOT:
-      binary_self("not", registers, instruction, i, output);
+      ternary_op("not", registers, instruction, i, output);
       break;
     case SAL:
-      binary_self("sal", registers, instruction, i, output);
+      ternary_op("sal", registers, instruction, i, output);
       break;
     case SAR:
-      binary_self("sar", registers, instruction, i, output);
+      ternary_op("sar", registers, instruction, i, output);
       break;
     case CMP:
-      binary_op("cmp", registers, instruction, output);
+      ternary_op("cmp", registers, instruction, i, output);
       break;
     case TEST:
-      binary_op("test", registers, instruction, output);
+      ternary_op("test", registers, instruction, i, output);
+      break;
+    case RET:
+      ret_op("ret", registers, instruction, i, output);
       break;
     default:
       assert(false);

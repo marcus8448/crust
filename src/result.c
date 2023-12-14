@@ -20,7 +20,7 @@ Result failure(const Token* at, const char* reason) {
   return error;
 }
 
-void print_error(const char* section, const Result result, const char* filename, const char* contents, const int len) {
+void print_error(const char* section, const Result result, const char* filename, const char* contents, const size_t len) {
   int line = 1;
   int lineStart = 0;
   for (int j = 0; j < result.at->index; j++) {
@@ -29,14 +29,14 @@ void print_error(const char* section, const Result result, const char* filename,
       line++;
     }
   }
-  int lineLen = 0;
-  for (int j = lineStart; j < len && contents[j] != '\n'; j++) {
+  size_t lineLen = 0;
+  for (size_t j = lineStart; j < len && contents[j] != '\n'; j++) {
     lineLen = j - lineStart + 1;
   }
   printf("%s error at %s[%i:%i]\n", section, filename, line, result.at->index - lineStart);
   printf("%.*s\n"
          "%*s%.*s\n",
-         lineLen, contents + lineStart, result.at->index - lineStart, "", result.at->len,
+         (int)lineLen, contents + lineStart, result.at->index - lineStart, "", result.at->len,
          "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
          "^^^^^^^^^^^^^^^^^^^");
   printf("%*s'%.*s': %s\n", result.at->index - lineStart, "", result.at->len, contents + result.at->index,

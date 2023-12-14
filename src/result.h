@@ -37,6 +37,6 @@ Result success();
 Result failure(const Token* at, const char* reason);
 
 bool successful(Result result);
-void print_error(const char* section, Result result, const char* filename, const char* contents, int len);
+void print_error(const char* section, Result result, const char* filename, const char* contents, size_t len);
 
 #endif // RESULT_H

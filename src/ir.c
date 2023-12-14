@@ -31,10 +31,6 @@ void instructiontable_free(InstructionTable* table) {
   // todo
 }
 
-uint8_t get_param_count(InstructionType instruction) {
-  return instruction < __binary ? 1 : 2;
-}
-
 Reference reference_direct(Allocation* allocation) {
   Reference reference;
   reference.access = Direct;
@@ -55,52 +51,46 @@ void instruction_init(Instruction* instruction) {
   instruction->inputs[0].allocation = NULL;
   instruction->inputs[1].access = UNINIT;
   instruction->inputs[1].allocation = NULL;
-  instruction->inputs[2].access = UNINIT;
-  instruction->inputs[2].allocation = NULL;
-  instruction->output = NULL;
+  instruction->output.access = UNINIT;
+  instruction->output.allocation = NULL;
   instruction->comment = NULL;
 }
 
-void instruction_unary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
-                       Allocation* output, char* comment) {
+void instruction_binary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
+                       Reference output, char* comment) {
+  assert(isAllocated(output.access));
   instruction->type = type;
   instruction->inputs[0] = a;
   instruction->output = output;
   instruction->comment = comment;
-  output->lastInstr = table->instructions.len - 1;
+  output.allocation->lastInstr = table->instructions.len - 1;
   if (isAllocated(a.access))
     a.allocation->lastInstr = table->instructions.len - 1;
 }
 
-void instruction_binary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
-                        Reference b, Allocation* output, char* comment) {
+void instruction_unary(Instruction* instruction, const InstructionTable* table, InstructionType type,
+                            Reference ref, char* comment) {
+  assert(isAllocated(ref.access));
   instruction->type = type;
-  instruction->inputs[0] = a;
-  instruction->inputs[1] = b;
-  instruction->output = output;
+  instruction->inputs[0] = ref;
+  instruction->output = ref;
   instruction->comment = comment;
-  output->lastInstr = table->instructions.len - 1;
-  if (isAllocated(a.access))
-    a.allocation->lastInstr = table->instructions.len - 1;
-  if (isAllocated(b.access))
-    b.allocation->lastInstr = table->instructions.len - 1;
+  ref.allocation->lastInstr = table->instructions.len - 1;
 }
 
 void instruction_ternary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
-                         Reference b, Reference c, Allocation* output, char* comment) {
+                       Reference b, Reference output, char* comment) {
+  assert(isAllocated(output.access));
   instruction->type = type;
   instruction->inputs[0] = a;
   instruction->inputs[1] = b;
-  instruction->inputs[2] = c;
   instruction->output = output;
   instruction->comment = comment;
-  output->lastInstr = table->instructions.len - 1;
+  output.allocation->lastInstr = table->instructions.len - 1;
   if (isAllocated(a.access))
     a.allocation->lastInstr = table->instructions.len - 1;
   if (isAllocated(b.access))
     b.allocation->lastInstr = table->instructions.len - 1;
-  if (isAllocated(c.access))
-    c.allocation->lastInstr = table->instructions.len - 1;
 }
 
 Allocation* table_allocate(InstructionTable* table) {
@@ -238,7 +228,7 @@ void statement_init(Statement* statement) {
   statement->values[2] = NULL;
 }
 
-Allocation* table_get_variable_by_token(InstructionTable* table, const char* contents, const Token* token) {
+Allocation* table_get_variable_by_token(const InstructionTable* table, const char* contents, const Token* token) {
   for (int i = 0; i < table->allocations.len; ++i) {
     if (token_str_cmp(token, contents, ((Allocation*)table->allocations.array[i])->name) == 0) {
       return table->allocations.array[i];
@@ -259,7 +249,7 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
     Reference array = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference index = solve_ast_node(contents, table, globals, functions, literals, node->right);
     Allocation* allocation = table_allocate_from(table, array);
-    instruction_binary(table_next(table), table, ADD, index, reference_direct(allocation), allocation, "index");
+    instruction_ternary(table_next(table), table, ADD, index, reference_direct(allocation), reference_direct(allocation), "index");
     return reference_deref(allocation);
   }
   case op_comma: {
@@ -268,10 +258,8 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
     return solve_ast_node(contents, table, globals, functions, literals, node->right);
   }
   case op_unary_negate: {
-    Reference inner = solve_ast_node(contents, table, globals, functions, literals, node->inner);
-    Allocation* allocation = table_allocate_from(table, inner);
-    Reference reference = reference_direct(allocation);
-    instruction_unary(table_next(table), table, NEG, reference, allocation, "unary");
+    Reference reference = reference_direct(table_allocate_from(table, solve_ast_node(contents, table, globals, functions, literals, node->inner)));
+    instruction_unary(table_next(table), table, NEG, reference, "negate");
     return reference;
   }
   case op_unary_plus: {
@@ -279,21 +267,20 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
   }
   case op_unary_addressof: {
     Reference inner = solve_ast_node(contents, table, globals, functions, literals, node->inner);
+    assert(isAllocated(inner.access));
+
     if (inner.access == Dereference) {
       inner.access = Direct;
       return inner;
-    } else if (inner.access == Direct) {
-      Allocation* allocation = table_allocate(table);
-      allocation->type.kind = ptr;
-      allocation->type.inner = &inner.allocation->type;
-      Reference reference = reference_direct(allocation);
-      inner.allocation->require_memory = true;
-      instruction_binary(table_next(table), table, LEA, inner, reference, allocation, "take address");
-      return reference_direct(allocation);
-    } else {
-      assert(false);
-      break;
     }
+
+    Allocation* allocation = table_allocate(table);
+    allocation->type.kind = ptr;
+    allocation->type.inner = &inner.allocation->type;
+    Reference reference = reference_direct(allocation);
+    inner.allocation->require_memory = true;
+    instruction_binary(table_next(table), table, LEA, inner, reference, "take address");
+    return reference;
   }
   case op_unary_derefernce: {
     Reference inner = solve_ast_node(contents, table, globals, functions, literals, node->inner);
@@ -314,38 +301,36 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
   case op_unary_not: {
     Reference inner = solve_ast_node(contents, table, globals, functions, literals, node->inner);
     Allocation* allocation = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, TEST, inner, inner, allocation, "test not");
     Reference reference = reference_direct(allocation);
-    instruction_unary(table_next(table), table, SETE, reference, allocation, "sete");
+    instruction_ternary(table_next(table), table, TEST, inner, inner, reference, "test not");
+    instruction_unary(table_next(table), table, SETE, reference, "sete");
     return reference;
   }
   case op_unary_bitwise_not: {
-    Reference inner = solve_ast_node(contents, table, globals, functions, literals, node->inner);
-    Allocation* allocation = table_allocate_from(table, inner);
-    Reference reference = reference_direct(allocation);
-    instruction_unary(table_next(table), table, NOT, reference, allocation, "not");
+    Reference reference = reference_direct(table_allocate_from(table, solve_ast_node(contents, table, globals, functions, literals, node->inner)));
+    instruction_unary(table_next(table), table, NOT, reference, "not");
     return reference;
   }
   case op_add: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* output = table_allocate_infer_type(table, left, right);
-    instruction_binary(table_next(table), table, ADD, left, right, output, "add a");
-    return reference_direct(output);
+    Reference output = reference_direct(table_allocate_infer_type(table, left, right));
+    instruction_ternary(table_next(table), table, ADD, left, right, output, "add a");
+    return output;
   }
   case op_subtract: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* output = table_allocate_infer_type(table, left, right);
-    instruction_binary(table_next(table), table, SUB, left, right, output, "add a");
-    return reference_direct(output);
+    Reference output = reference_direct(table_allocate_infer_type(table, left, right));
+    instruction_ternary(table_next(table), table, SUB, left, right, output, "add a");
+    return output;
   }
   case op_multiply: { // fixme
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* output = table_allocate_infer_type(table, left, right);
-    instruction_binary(table_next(table), table, IMUL, left, right, output, "add a");
-    return reference_direct(output);
+    Reference output = reference_direct(table_allocate_infer_type(table, left, right));
+    instruction_ternary(table_next(table), table, IMUL, left, right, output, "add a");
+    return output;
   }
   case op_divide:
     // fixme div is not simple
@@ -356,53 +341,53 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
   case op_bitwise_or: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* output = table_allocate_infer_type(table, left, right);
-    instruction_binary(table_next(table), table, OR, left, right, output, "add a");
-    return reference_direct(output);
+    Reference output = reference_direct(table_allocate_infer_type(table, left, right));
+    instruction_ternary(table_next(table), table, OR, left, right, output, "add a");
+    return output;
   }
   case op_bitwise_xor: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* output = table_allocate_infer_type(table, left, right);
-    instruction_binary(table_next(table), table, XOR, left, right, output, "add a");
-    return reference_direct(output);
+    Reference output = reference_direct(table_allocate_infer_type(table, left, right));
+    instruction_ternary(table_next(table), table, XOR, left, right, output, "add a");
+    return output;
   }
   case op_bitwise_and: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* output = table_allocate_infer_type(table, left, right);
-    instruction_binary(table_next(table), table, AND, left, right, output, "add a");
-    return reference_direct(output);
+    Reference output = reference_direct(table_allocate_infer_type(table, left, right));
+    instruction_ternary(table_next(table), table, AND, left, right, output, "add a");
+    return output;
   }
   case op_assignment: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
 
     assert(isAllocated(left.access));
-    instruction_binary(table_next(table), table, MOV, right, left, left.allocation, "mov unary");
+    instruction_binary(table_next(table), table, MOV, right, left, "mov unary");
     return left;
   }
   case op_and: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* lhs = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, TEST, left, left, lhs, "mov unary");
-    Allocation* rhs = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, TEST, right, right, rhs, "mov unary");
-    Allocation* out = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, AND, reference_direct(lhs), reference_direct(rhs), out, "mov unary");
-    return reference_direct(out);
+    Reference lhs = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, TEST, left, left, lhs, "mov unary");
+    Reference rhs = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, TEST, right, right, rhs, "mov unary");
+    Reference out = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, AND, lhs, rhs, out, "mov unary");
+    return out;
   }
   case op_or: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* lhs = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, TEST, left, left, lhs, "mov unary");
-    Allocation* rhs = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, TEST, right, right, rhs, "mov unary");
-    Allocation* out = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, OR, reference_direct(lhs), reference_direct(rhs), out, "mov unary");
-    return reference_direct(out);
+    Reference lhs = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, TEST, left, left, lhs, "mov unary");
+    Reference rhs = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, TEST, right, right, rhs, "mov unary");
+    Reference out = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, OR, lhs, rhs, out, "mov unary");
+    return out;
   }
   case op_deref_member_access:
     break;
@@ -411,82 +396,70 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
   case op_bitwise_left_shift: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* output = table_allocate_infer_type(table, left, right);
-    instruction_binary(table_next(table), table, SAL, left, right, output, "add a");
-    return reference_direct(output);
+    Reference output = reference_direct(table_allocate_infer_type(table, left, right));
+    instruction_ternary(table_next(table), table, SAL, left, right, output, "add a");
+    return output;
   }
   case op_bitwise_right_shift: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* output = table_allocate_infer_type(table, left, right);
-    instruction_binary(table_next(table), table, SAR, left, right, output, "add a");
-    return reference_direct(output);
+    Reference output = reference_direct(table_allocate_infer_type(table, left, right));
+    instruction_ternary(table_next(table), table, SAR, left, right, output, "add a");
+    return output;
   }
   case op_compare_equals: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
 
-    Allocation* output = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, CMP, right, left, output, "cmp eq");
-
-    Reference reference = reference_direct(output);
-    instruction_unary(table_next(table), table, SETE, reference, output, "==");
-    return reference;
+    Reference output = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, CMP, right, left, output, "cmp eq");
+    instruction_unary(table_next(table), table, SETE, output, "==");
+    return output;
   }
   case op_compare_not_equals: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
 
-    Allocation* output = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, CMP, right, left, output, "cmp eq");
-
-    Reference reference = reference_direct(output);
-    instruction_unary(table_next(table), table, SETNE, reference, output, "!=");
-    return reference;
+    Reference output = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, CMP, right, left, output, "cmp eq");
+    instruction_unary(table_next(table), table, SETNE, output, "!=");
+    return output;
   }
   case op_less_than: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
 
-    Allocation* output = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, CMP, right, left, output, "cmp eq");
-
-    Reference reference = reference_direct(output);
-    instruction_unary(table_next(table), table, SETL, reference, output, "<");
-    return reference;
+    Reference output = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, CMP, right, left, output, "cmp eq");
+    instruction_unary(table_next(table), table, SETE, output, "<");
+    return output;
   }
   case op_greater_than: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
 
-    Allocation* output = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, CMP, right, left, output, "cmp eq");
-
-    Reference reference = reference_direct(output);
-    instruction_unary(table_next(table), table, SETG, reference, output, ">");
-    return reference;
+    Reference output = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, CMP, right, left, output, "cmp eq");
+    instruction_unary(table_next(table), table, SETE, output, ">");
+    return output;
   }
   case op_less_than_equal: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
 
-    Allocation* output = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, CMP, right, left, output, "cmp eq");
-
-    Reference reference = reference_direct(output);
-    instruction_unary(table_next(table), table, SETLE, reference, output, "<=");
-    return reference;
+    Reference output = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, CMP, right, left, output, "cmp eq");
+    instruction_unary(table_next(table), table, SETE, output, "<=");
+    return output;
   }
   case op_greater_than_equal: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
 
-    Allocation* output = table_allocate_from_register(table, al, u8type);
-    instruction_binary(table_next(table), table, CMP, right, left, output, "cmp eq");
-
-    Reference reference = reference_direct(output);
-    instruction_unary(table_next(table), table, SETGE, reference, output, ">=");
-    return reference;
+    Reference output = reference_direct(table_allocate_from_register(table, al, u8type));
+    instruction_ternary(table_next(table), table, CMP, right, left, output, "cmp eq");
+    instruction_unary(table_next(table), table, SETE, output, ">=");
+    return output;
   }
   case op_value_constant: { // todo string literals
     Reference reference;
