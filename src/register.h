@@ -1,9 +1,5 @@
 #ifndef REGISTER_H
 #define REGISTER_H
-#include <stdio.h>
-
-#include "ast.h"
-#include "struct/list.h"
 #include "types.h"
 
 #include <stdint.h>
@@ -87,79 +83,17 @@ enum Register8 {
   r15b,
 };
 
+char mnemonic_suffix(Width size);
+char fp_mnemonic_suffix(Width size);
+const char* get_register_mnemonic(Width size, uint8_t index);
+
 extern const char* mnemonicFP[16];
 extern const char* mnemonic64[16];
 extern const char* mnemonic32[16];
 extern const char* mnemonic16[16];
 extern const char* mnemonic8[16];
-extern int argumentRegisters[6];
-
-typedef enum { ref_variable, ref_temporary, ref_constant } ValueRefType;
-
-typedef struct {
-  ValueRefType type;
-  Type value_type;
-
-  union {
-    struct {
-      const char* name;
-      int8_t reg;
-      int offset;
-      bool on_stack;
-    };
-
-    struct {
-      char* repr;
-    };
-  };
-} ValueRef;
-
-LIST_API(StackAlloc, stackalloc, ValueRef)
-
-typedef struct StackFrame {
-  const struct StackFrame* parent;
-  StackAllocList allocations;
-  bool activeRegisters[16];
-  int curOffset;
-} StackFrame;
-
-typedef struct {
-  FunctionList functions;
-  VarList globals;
-  StrList strLiterals;
-} Globals;
-
-char mnemonic_suffix(Width size);
-
-void stackframe_init(StackFrame* frame, const StackFrame* parent);
-ValueRef* stackframe_claim_or_copy_from(StackFrame* frame, Variable variable, int8_t reg, FILE* output);
-ValueRef* stackframe_allocate(StackFrame* frame, Variable variable);
-ValueRef* stackframe_allocate_temporary(StackFrame* frame, Type type, FILE* output);
-ValueRef* stackframe_allocate_temporary_reg(StackFrame* frame, Type type, int8_t reg, FILE* output);
-void stackframe_allocate_temporary_from(StackFrame* frame, ValueRef** maybe_temp, FILE* output);
-ValueRef* stackframe_allocate_variable_from(StackFrame* frame, ValueRef* value, Variable variable, FILE* file);
-void stackframe_free_ref(StackFrame* frame, ValueRef* ref);
-ValueRef* stackframe_get(StackFrame* frame, Variable variable);
-ValueRef* stackframe_get_by_name(StackFrame* frame, const char* name);
-ValueRef* stackframe_get_by_token(const StackFrame* frame, const char* contents, const Token* id);
-char* allocation_mnemonic(const ValueRef* alloc);
-char* stackframe_mnemonic(StackFrame* frame, Variable variable);
-char stackframe_make_register_available(StackFrame* frame, FILE* output);
-void stackframe_force_move_register(StackFrame* frame, int8_t reg, FILE* output);
-void stackframe_load_arguments(StackFrame* frame, const Function* function);
-void stackframe_moveto_register(StackFrame* frame, ValueRef* alloc, FILE* output);
-void stackframe_force_into_register(StackFrame* frame, ValueRef* alloc, int8_t reg, FILE* output);
-void stackframe_set_or_copy_register(StackFrame* frame, ValueRef* ref, int8_t reg, FILE* output);
-void stackframe_moveto_stack(StackFrame* frame, ValueRef* ref, FILE* output);
-void stackframe_set_register(StackFrame* frame, ValueRef* ref, int8_t reg);
-
-void stackframe_moveto_register_v(StackFrame* frame, Variable variable, FILE* output);
-void stackframe_free(const StackFrame* frame, FILE* output);
-
-const char* get_register_mnemonic(Width size, uint8_t index);
-
-char ref_get_register(const ValueRef* ref);
-void ref_init_var(ValueRef* ref, Variable variable);
-void ref_init_temp(ValueRef* ref, Type type);
-
+extern uint8_t argumentRegisters[6];
+extern uint8_t registerPriority[14];
+extern uint8_t calleeSavedRegisters[7];
+extern uint8_t callerSavedRegisters[9];
 #endif // REGISTER_H

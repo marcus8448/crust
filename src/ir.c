@@ -69,7 +69,7 @@ void instruction_binary(Instruction* instruction, const InstructionTable* table,
 }
 
 void instruction_unary(Instruction* instruction, const InstructionTable* table, InstructionType type,
-                            Reference ref, char* comment) {
+                       const Reference ref, char* comment) {
   assert(isAllocated(ref.access));
   instruction->type = type;
   instruction->inputs[0] = ref;
@@ -194,7 +194,7 @@ Allocation* table_allocate_from_variable(InstructionTable* table, Reference ref,
   return alloc;
 }
 
-Allocation* table_allocate_from_register(InstructionTable* table, int8_t reg, Type type) {
+Allocation* table_allocate_from_register(InstructionTable* table, uint8_t reg, Type type) {
   Allocation* alloc = table_allocate(table);
   alloc->source.location = Register;
   alloc->source.reg = reg;
@@ -475,6 +475,6 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
   }
   case op_cast:
     break;
-  };
+  }
   exit(23);
 }

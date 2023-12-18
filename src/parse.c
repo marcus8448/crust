@@ -28,7 +28,6 @@ Result parse_scope(const char* contents, const Token** token, InstructionTable* 
   assert(contents != NULL);
   token_matches(*token, token_opening_curly_brace);
   while ((*token)->next != NULL) {
-    int deref = 0;
     switch ((*token = (*token)->next)->type) {
     case token_closing_curly_brace: {
       return success();
@@ -70,6 +69,7 @@ Result parse_scope(const char* contents, const Token** token, InstructionTable* 
       break;
     }
     case token_asterik: {
+      int deref = 0;
       while ((*token)->type == token_asterik) {
         deref++;
         *token = (*token)->next;
@@ -101,17 +101,10 @@ Result parse_scope(const char* contents, const Token** token, InstructionTable* 
       break;
     }
     case token_cf_if:
-      // token = list->array[(*index)++];
-      // if (token->type != opening_paren)
-      // {
-      //     printf("expected (, found %s", token_name(token->type));
-      //     return false;
-      // }
-      //
-      // int reg = register_claim(registers, "@@IF!", Quad);
-      // parse_statement(list, index, registers, reg, output);
-      //
-      // register_release(registers, reg);
+      AstNode condition;
+      forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, &condition));
+      token_matches(*token, token_opening_curly_brace);
+      //todo
       break;
     case token_cf_else: {
       // *token = (*token)->next;

@@ -4,9 +4,6 @@
 
 #include <string.h>
 
-// no rbp, rsp
-uint8_t registerPriority[15] = {rbx, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15, rax};
-
 void registers_init(Registers* registers, InstructionTable* table) {
   for (int i = 0; i < 16; ++i) {
     registers->registers[i] = false;
@@ -27,8 +24,8 @@ void registers_claim(Registers* registers, Allocation* allocation) {
   switch (unknown->location) {
   case L_None: {
     if (!allocation->require_memory) {
-      for (int i = 0; i < 15; ++i) {
-        const int reg = registerPriority[i];
+      for (int i = 0; i < 14; ++i) {
+        const uint8_t reg = registerPriority[i];
         if (!registers->registers[reg]) {
           registers->registers[reg] = true;
           unknown->location = L_Register;
@@ -74,7 +71,7 @@ void registers_move_tostack(Registers* registers, Allocation* allocation, FILE* 
   }
 }
 
-void registers_claim_register(Registers* registers, Allocation* output, int8_t reg) {
+void registers_claim_register(Registers* registers, Allocation* output, uint8_t reg) {
   assert(!registers->registers[reg]);
   registers->registers[reg] = true;
   Storage* storage = registers_get_storage(registers, output);
@@ -82,7 +79,7 @@ void registers_claim_register(Registers* registers, Allocation* output, int8_t r
   storage->reg = reg;
 }
 
-void registers_claim_stack(const Registers* registers, Allocation* output, int16_t offset) {
+void registers_claim_stack(const Registers* registers, Allocation* output, const int16_t offset) {
   Storage* storage = registers_get_storage(registers, output);
   storage->offset = offset;
   storage->location = L_Stack;
@@ -174,26 +171,9 @@ void binary_mov(const char* instr, Registers* registers, Instruction* instructio
           registers_get_mnemonic(registers, instruction->output));
 }
 
-void ret_op(const char* instr, Registers* registers, Instruction* instruction, int index, FILE* output) {
+void ret_op(const Registers* registers, const Instruction* instruction, FILE* output) {
   registers_force_register(registers, instruction->output, rax, output);
   fputs("ret\n", output);
-}
-
-void binary_self(const char* instr, Registers* registers, Instruction* instruction, int index, FILE* output) {
-  int src;
-  if (isAllocated(instruction->inputs[0].access) && instruction->inputs[0].allocation->lastInstr == index) {
-    instruction->output = instruction->inputs[0];
-    src = 1;
-  } else if (isAllocated(instruction->inputs[1].access) && instruction->inputs[1].allocation->lastInstr == index) {
-    instruction->output = instruction->inputs[1];
-    src = 0;
-  } else {
-    fprintf(output, "mov%c %s, %s\n", 'q', registers_get_mnemonic(registers, instruction->inputs[0]),
-            registers_get_mnemonic(registers, instruction->output));
-    src = 1;
-  }
-  fprintf(output, "%s%c %s, %s\n", instr, 'q', registers_get_mnemonic(registers, instruction->inputs[src]),
-          registers_get_mnemonic(registers, instruction->output));
 }
 
 void ternary_op(const char* instr, Registers* registers, Instruction* instruction, int index, FILE* output) {
@@ -411,7 +391,7 @@ void generate_statement(Registers* registers, const char* contents, InstructionT
       ternary_op("test", registers, instruction, i, output);
       break;
     case RET:
-      ret_op("ret", registers, instruction, i, output);
+      ret_op(registers, instruction, output);
       break;
     default:
       assert(false);

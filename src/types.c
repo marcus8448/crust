@@ -9,8 +9,8 @@ int type_size(Type type) {
   return typekind_size(type.kind);
 }
 
-Width typekind_width(const TypeKind kind) {
-  switch (kind) {
+Width typekind_width(const TypeKind type) {
+  switch (type) {
   case u8:
   case i8:
     return Byte;
@@ -30,6 +30,7 @@ Width typekind_width(const TypeKind kind) {
     return Quad;
   }
   assert(false);
+  return -1;
 }
 
 int typekind_size(TypeKind type) {

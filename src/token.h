@@ -2,6 +2,7 @@
 #define TOKEN_H
 #include "struct/list.h"
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef enum {
   token_eof = '\0',
@@ -73,10 +74,9 @@ typedef struct Token {
   struct Token* prev;
 
   int index;
-  int len;
+  uint8_t len;
 } Token;
 
-void token_init(Token* token, TokenType type, int index, int len);
 bool token_value_compare(const Token* token, const char* contents, const char* compare);
 char* token_copy(const Token* token, const char* contents);
 void token_copy_to(const Token* token, const char* contents, char* output);

@@ -27,8 +27,8 @@ void registers_claim(Registers* registers, Allocation* allocation);
 Storage* registers_get_storage(const Registers* registers, Allocation* allocation);
 Allocation* registers_allocationfrom_register(const Registers* registers, InstructionTable* table, uint8_t reg);
 void registers_move_tostack(Registers* registers, Allocation* allocation, FILE* output);
-void registers_claim_register(Registers* registers, Allocation* output, int8_t reg);
-void registers_claim_stack(const Registers* registers, Allocation* output, int16_t int16);
+void registers_claim_register(Registers* registers, Allocation* output, uint8_t reg);
+void registers_claim_stack(const Registers* registers, Allocation* output, int16_t offset);
 void registers_force_register(const Registers* registers, Reference allocation, uint8_t reg, FILE* output);
 void registers_override(const Registers* registers, Allocation* output, Allocation* from);
 

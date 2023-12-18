@@ -61,6 +61,21 @@ Result parse_function_declaration(const char* contents, const Token** token, Fun
   return success();
 }
 
+int add_str_literal(char* contents, const Token* token, StrList* strLiterals, FILE* output) {
+  char* buf = malloc(token->len + 1);
+  memcpy(buf, contents + token->index, token->len);
+  buf[token->len] = '\0';
+  const int index = strlist_indexof(strLiterals, buf);
+  if (index != -1) {
+    free(buf);
+    return index;
+  }
+  fprintf(output, ".L.STR%i:\n\t.asciz\t%s\n\t.size\t.L.STR%i, %i\n", strLiterals->len, buf, strLiterals->len,
+          token->len - 1);
+  strlist_add(strLiterals, buf);
+  return strLiterals->len - 1;
+}
+
 Result preprocess_globals(char* contents, const Token* token, StrList* strLiterals, VarList* variables,
                           FunctionList* functions, FILE* output) {
   while (token != NULL) {
@@ -110,27 +125,28 @@ Result preprocess_globals(char* contents, const Token* token, StrList* strLitera
         token_matches(token, token_equals_assign);
         token = token->next;
         const Token* value = token;
-        token_matches(token, token_constant);
-        token = token->next;
-        token_matches(token, token_semicolon);
-        const int bytes = size_bytes(typekind_width(type.kind));
-        fprintf(output, "%s:\n", variable.name);
-        fprintf(output, "\t.%s\t%.*s\n", size_mnemonic(typekind_width(type.kind)), value->len, contents + value->index);
-        fprintf(output, "\t.size\t%s, %i\n", variable.name, bytes);
+        if (token->type == token_constant) {
+          token_matches(token, token_constant);
+          token = token->next;
+          token_matches(token, token_semicolon);
+          const int bytes = size_bytes(typekind_width(type.kind));
+          fprintf(output, "%s:\n", variable.name);
+          fprintf(output, "\t.%s\t%.*s\n", size_mnemonic(typekind_width(type.kind)), value->len, contents + value->index);
+          fprintf(output, "\t.size\t%s, %i\n", variable.name, bytes);
+        } else if (token->type == token_string) {
+          token_matches(token, token_string);
+          const int index = add_str_literal(contents, token, strLiterals, output);
+          token = token->next;
+          token_matches(token, token_semicolon);
+          fprintf(output, "%s:\n", variable.name);
+          fprintf(output, "\t.quad\t.L.STR%i\n", index);
+        } else {
+          return failure(token, "expected constant or string literal");
+        }
       }
     } break;
     case token_string: {
-      char* buf = malloc(token->len + 1);
-      memcpy(buf, contents + token->index, token->len);
-      buf[token->len] = '\0';
-      const int index = strlist_indexof(strLiterals, buf);
-      if (index != -1) {
-        free(buf);
-      } else {
-        fprintf(output, ".L.STR%i:\n\t.asciz\t%s\n\t.size\t.L.STR%i, %i\n", strLiterals->len, buf, strLiterals->len,
-                token->len - 1);
-        strlist_add(strLiterals, buf);
-      }
+      add_str_literal(contents, token, strLiterals, output);
     } break;
     case token_keyword_extern: {
       token = token->next;

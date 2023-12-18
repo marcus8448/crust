@@ -28,7 +28,7 @@ typedef struct {
   InitialLocationType location;
   int start;
   union {
-    int8_t reg;
+    uint8_t reg;
     int16_t offset;
     Reference reference;
   };
@@ -100,7 +100,7 @@ Reference reference_deref(Allocation* allocation);
 void instruction_init(Instruction* instruction);
 
 void instruction_unary(Instruction* instruction, const InstructionTable* table, InstructionType type,
-                       Reference output, char* comment);
+                       Reference ref, char* comment);
 void instruction_binary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
                        Reference output, char* comment);
 void instruction_ternary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
@@ -113,7 +113,7 @@ Allocation* table_allocate_infer_type(InstructionTable* table, Reference a, Refe
 Allocation* table_allocate_variable(InstructionTable* table, Variable variable);
 Allocation* table_allocate_from_variable(InstructionTable* table, Reference ref, Variable variable);
 Allocation* table_allocate_from(InstructionTable* table, Reference ref);
-Allocation* table_allocate_from_register(InstructionTable* table, int8_t reg, Type type);
+Allocation* table_allocate_from_register(InstructionTable* table, uint8_t reg, Type type);
 Allocation* table_allocate_from_stack(InstructionTable* table, int16_t offset, Type type);
 
 Instruction* table_next(InstructionTable* table);

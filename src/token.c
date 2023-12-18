@@ -8,9 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-void token_push(Token** token, const TokenType type, const int index, const int len) {
+void token_push(Token** token, const TokenType type, const size_t index, const uint8_t len) {
+  assert(index < INT_MAX);
   (*token)->type = type;
-  (*token)->index = index;
+  (*token)->index = (int)index;
   (*token)->len = len;
 
   if ((*token)->next == NULL) {
@@ -21,11 +22,19 @@ void token_push(Token** token, const TokenType type, const int index, const int 
   *token = (*token)->next;
 }
 
+int sz_strncmp(const char* buffer, const char* cmp, const uint8_t len) {
+  if (cmp == NULL)
+    return -1;
+  if (strlen(cmp) > len)
+    return 1;
+  return strncmp(buffer, cmp, len);
+}
+
 bool tokenize(const char* data, const size_t len, Token* head) {
   typedef enum { any, comment_nl, comment_cl, q_string } Mode;
 
   char buffer[256];
-  unsigned char bufLen = 0;
+  uint8_t bufLen = 0;
   bool numeric = false;
   bool escaping = false;
   Mode mode = any;
@@ -47,19 +56,19 @@ bool tokenize(const char* data, const size_t len, Token* head) {
           c == '<' || c == '>' || c == '~' || c == '&' || c == '|' || c == '!' || c == '+' || c == '-' || c == '/' ||
           c == '*' || c == ';' || c == '"' || c == ':' || c == '.') {
         if (bufLen > 0) {
-          if (strncmp(buffer, "fn", bufLen) == 0) {
+          if (sz_strncmp(buffer, "fn", bufLen) == 0) {
             token_push(&next, token_keyword_fn, i - bufLen, bufLen);
-          } else if (strncmp(buffer, "let", bufLen) == 0) {
+          } else if (sz_strncmp(buffer, "let", bufLen) == 0) {
             token_push(&next, token_keyword_let, i - bufLen, bufLen);
-          } else if (strncmp(buffer, "extern", bufLen) == 0) {
+          } else if (sz_strncmp(buffer, "extern", bufLen) == 0) {
             token_push(&next, token_keyword_extern, i - bufLen, bufLen);
-          } else if (strncmp(buffer, "as", bufLen) == 0) {
+          } else if (sz_strncmp(buffer, "as", bufLen) == 0) {
             token_push(&next, token_keyword_as, i - bufLen, bufLen);
-          } else if (strncmp(buffer, "if", bufLen) == 0) {
+          } else if (sz_strncmp(buffer, "if", bufLen) == 0) {
             token_push(&next, token_cf_if, i - bufLen, bufLen);
-          } else if (strncmp(buffer, "return", bufLen) == 0) {
+          } else if (sz_strncmp(buffer, "return", bufLen) == 0) {
             token_push(&next, token_cf_return, i - bufLen, bufLen);
-          } else if (strncmp(buffer, "else", bufLen) == 0) {
+          } else if (sz_strncmp(buffer, "else", bufLen) == 0) {
             token_push(&next, token_cf_else, i - bufLen, bufLen);
           } else {
             if (numeric) {
@@ -221,16 +230,17 @@ bool tokenize(const char* data, const size_t len, Token* head) {
         } else {
           escaping = false;
         }
-        buffer[bufLen++] = c;
+        buffer[bufLen++] = (char)c;
       }
       break;
     }
     }
-    last = c;
+    last = (char)c;
   }
 
+  assert(len < INT_MAX);
   next->type = token_eof;
-  next->index = len;
+  next->index = (int)len;
   next->len = 0;
   return true;
 }
@@ -329,12 +339,6 @@ const char* token_name(const TokenType type) {
   abort();
 }
 
-void token_init(Token* token, const TokenType type, const int index, const int len) {
-  token->type = type;
-  token->index = index;
-  token->len = len;
-}
-
 bool token_value_compare(const Token* token, const char* contents, const char* compare) {
   contents += token->index;
   for (int i = 0; i < token->len; i++) {
@@ -359,6 +363,8 @@ void token_copy_to(const Token* token, const char* contents, char* output) {
 int token_str_cmp(const Token* token, const char* contents, const char* cmp) {
   if (cmp == NULL)
     return -1;
+  if (strlen(cmp) > token->len)
+    return 1;
   return strncmp(contents + token->index, cmp, token->len);
 }
 

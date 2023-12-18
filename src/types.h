@@ -5,7 +5,7 @@
 
 typedef enum {
   // 8bit
-  Byte,
+  Byte = 1,
   // 16bit
   Word,
   // 32bit
@@ -15,7 +15,7 @@ typedef enum {
 } Width;
 
 typedef enum {
-  i8,
+  i8 = 1,
   i16,
   i32,
   i64,

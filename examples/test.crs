@@ -1,6 +1,7 @@
 let x: i64;
 let y: i32 = 123;
 let z: i8 = 4;
+let a: [u8] = "";
 
 extern fn printf(str: [i8], value: i8);
 
