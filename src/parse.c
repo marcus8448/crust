@@ -28,6 +28,7 @@ Result parse_scope(const char* contents, const Token** token, InstructionTable* 
   assert(contents != NULL);
   token_matches(*token, token_opening_curly_brace);
   while ((*token)->next != NULL) {
+    int deref = 0;
     switch ((*token = (*token)->next)->type) {
     case token_closing_curly_brace: {
       return success();
@@ -69,25 +70,49 @@ Result parse_scope(const char* contents, const Token** token, InstructionTable* 
       break;
     }
     case token_asterik: {
-      int deref = 0;
       while ((*token)->type == token_asterik) {
         deref++;
         *token = (*token)->next;
       }
     }
-      // fall through
+    // fall through
     case token_identifier: {
-      char* name = token_copy(*token, contents);
+      const Token *token1 = *token;
 
       *token = (*token)->next;
 
       switch ((*token)->type) {
       case token_equals_assign: {
         AstNode node;
+        token_matches(*token, token_equals_assign);
+        *token = (*token)->next;
         forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
+
+        AstNode eq_left;
+        eq_left.type = op_value_variable;
+        eq_left.token = token1;
+        eq_left.val_type.kind=UNINIT;
+        eq_left.val_type.inner=NULL;
+        AstNode* out = &eq_left;
+        for (int i = 0; i < deref; i++) {
+          AstNode *inner = malloc(sizeof(AstNode));
+          inner->type = op_unary_derefernce;
+          inner->token = token1;
+          inner->inner = out;
+          out = inner;
+        }
+
+        AstNode eq;
+        eq.type = op_assignment;
+        eq.left = out;
+        eq.right = &node;
+
+        solve_ast_node(contents, table, globals, functions, literals, &eq);
       } break;
       case token_opening_paren: {
+        char* name = token_copy(token1, contents);
         const int indexof = functionlist_indexof(functions, name);
+        free(name);
         if (indexof == -1) {
           return failure(*token, "unknown function");
         }
@@ -97,7 +122,6 @@ Result parse_scope(const char* contents, const Token** token, InstructionTable* 
         token_matches_ext(*token, token_eof, "invalid id sx");
         break;
       }
-      free(name);
       break;
     }
     case token_cf_if:

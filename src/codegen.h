@@ -23,7 +23,10 @@ typedef struct {
 
 void registers_init(Registers* registers, InstructionTable* table);
 void registers_free(Registers* registers);
+
 void registers_claim(Registers* registers, Allocation* allocation);
+void registers_make_stack(Registers* registers, Allocation* allocation, FILE* output);
+
 Storage* registers_get_storage(const Registers* registers, Allocation* allocation);
 Allocation* registers_allocationfrom_register(const Registers* registers, InstructionTable* table, uint8_t reg);
 void registers_move_tostack(Registers* registers, Allocation* allocation, FILE* output);

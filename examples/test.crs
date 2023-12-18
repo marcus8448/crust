@@ -4,13 +4,14 @@ let z: i8 = 4;
 let a: [u8] = "";
 
 extern fn printf(str: [i8], value: i8);
+extern fn malloc(len: i32) -> [u8];
 
 fn main() -> i64 {
     let x: i64 = 13;
     let y: i64 = x + 5;
-    let z: [i64] = &x;
+    let z: [i64] = &y;
 
-    //*z = 5;
+    *z = 5;
 
     return *z * 7 - 1 * 2;
 }

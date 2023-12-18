@@ -102,7 +102,10 @@ typedef enum {
   // <number>
   op_value_constant,
   // <identifier>
-  op_value_variable
+  op_value_variable,
+
+  cf_if,
+  cf_while
 } AstNodeType;
 
 int ast_operand_count(AstNodeType type);
@@ -112,18 +115,26 @@ typedef struct AstNode {
   AstNodeType type;
   const Token* token;
 
-  // unary operators
-  Type val_type;
-
   union {
-    // binary operators
+    // control flow
     struct {
-      struct AstNode* left;
-      struct AstNode* right;
+      struct AstNode** children;
+      int count;
     };
 
     struct {
-      struct AstNode* inner;
+      Type val_type;
+      union {
+        // binary operators
+        struct {
+          struct AstNode* left;
+          struct AstNode* right;
+        };
+
+        struct {
+          struct AstNode* inner;
+        };
+      };
     };
   };
 } AstNode;

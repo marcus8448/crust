@@ -40,7 +40,6 @@ typedef struct Allocation {
   InitialLocation source;
   const char* name; // NULLABLE
   bool lvalue;
-  bool require_memory;
   int lastInstr;
 } Allocation;
 

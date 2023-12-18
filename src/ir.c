@@ -100,7 +100,6 @@ Allocation* table_allocate(InstructionTable* table) {
   alloc->name = NULL;
   alloc->type.kind = -1;
   alloc->type.inner = NULL;
-  alloc->require_memory = false;
   alloc->lvalue = false;
   alloc->index = table->allocations.len - 1;
   return *allocation;
@@ -151,7 +150,6 @@ Allocation* table_allocate_infer_type(InstructionTable* table, Reference a, Refe
     puts("warn: alloc type guess");
   }
 
-  alloc->require_memory = false;
   alloc->lvalue = false;
   alloc->index = table->allocations.len - 1;
   return *allocation;
@@ -248,9 +246,9 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
   case op_array_index: {
     Reference array = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference index = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* allocation = table_allocate_from(table, array);
-    instruction_ternary(table_next(table), table, ADD, index, reference_direct(allocation), reference_direct(allocation), "index");
-    return reference_deref(allocation);
+    Allocation* output = table_allocate_infer_type(table, array, index);
+    instruction_ternary(table_next(table), table, ADD, array, index, reference_direct(output), "index");
+    return reference_deref(output);
   }
   case op_comma: {
     // discard left, keep right
@@ -274,11 +272,10 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
       return inner;
     }
 
-    Allocation* allocation = table_allocate(table);
-    allocation->type.kind = ptr;
-    allocation->type.inner = &inner.allocation->type;
-    Reference reference = reference_direct(allocation);
-    inner.allocation->require_memory = true;
+    Allocation* output = table_allocate(table);
+    output->type.kind = ptr;
+    output->type.inner = &inner.allocation->type;
+    Reference reference = reference_direct(output);
     instruction_binary(table_next(table), table, LEA, inner, reference, "take address");
     return reference;
   }
