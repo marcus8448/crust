@@ -104,22 +104,31 @@ typedef enum {
   // <identifier>
   op_value_variable,
 
+  op_value_let,
+
   cf_if,
-  cf_while
+  cf_while,
+  cf_return
 } AstNodeType;
 
 int ast_operand_count(AstNodeType type);
 int ast_precedence(AstNodeType type);
+
+LIST_API(AstNode, astnode, struct AstNode)
 
 typedef struct AstNode {
   AstNodeType type;
   const Token* token;
 
   union {
+    // let x
+    Variable variable;
+
     // control flow
     struct {
-      struct AstNode** children;
-      int count;
+      struct AstNode* condition;
+      AstNodeList* actions;
+      AstNodeList* alternative;
     };
 
     struct {

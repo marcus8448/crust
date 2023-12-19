@@ -75,8 +75,14 @@ typedef enum {
 
 typedef struct {
   InstructionType type;
-  Reference inputs[2];
-  Reference output;
+  union {
+    struct {
+      Reference inputs[2];
+      Reference output;
+    };
+
+    char* label; //todo
+  };
   char* comment;
 } Instruction;
 

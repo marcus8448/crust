@@ -472,6 +472,17 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
   }
   case op_cast:
     break;
+  case op_value_let:
+    return reference_direct(table_allocate_variable(table, node->variable));
+  case cf_if:
+    break;
+  case cf_while:
+    break;
+  case cf_return: {
+    Reference value = solve_ast_node(contents, table, globals, functions, literals, node->inner);
+    instruction_unary(table_next(table), table, RET, value, "ret");
+    return value;
+  }
   }
   exit(23);
 }

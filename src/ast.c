@@ -343,6 +343,8 @@ Result parse_value(const char* contents, const Token** token, VarList* globals, 
   //     break;
   // case token_cf_return:
   //     break;
+  // case token_cf_break:
+  //     break;
   default:
     return failure(*token, "unkon");
   }
@@ -374,3 +376,5 @@ Result parse_args(const char* contents, const Token** token, Function* function,
     }
   }
 }
+
+LIST_IMPL(AstNode, astnode, AstNode)

@@ -6,13 +6,19 @@ Result parse_function(const char* contents, Function* function, VarList* globals
                       StrList* literals, FILE* output) {
   assert(contents != NULL);
   if (function->start != NULL) {
+    AstNodeList nodes;
+    astnodelist_init(&nodes, 16);
     InstructionTable table;
     instructiontable_init(&table, 0);
 
     fprintf(output, "%s:\n", function->name);
     table_allocate_arguments(&table, function);
     const Token* token = function->start;
-    forward_err(parse_scope(contents, &token, &table, globals, functions, literals, output));
+    forward_err(parse_scope(contents, &token, globals, functions, literals, &nodes));
+
+    for (int i = 0; i < nodes.len; ++i) {
+      solve_ast_node(contents, &table, globals, functions, literals, &nodes.array[i]);
+    }
     Registers registers;
 
     registers_init(&registers, &table);
@@ -23,12 +29,11 @@ Result parse_function(const char* contents, Function* function, VarList* globals
   return success();
 }
 
-Result parse_scope(const char* contents, const Token** token, InstructionTable* table, VarList* globals,
-                   FunctionList* functions, StrList* literals, FILE* output) {
+Result parse_scope(const char* contents, const Token** token, VarList* globals,
+                   FunctionList* functions, StrList* literals, AstNodeList* nodes) {
   assert(contents != NULL);
   token_matches(*token, token_opening_curly_brace);
   while ((*token)->next != NULL) {
-    int deref = 0;
     switch ((*token = (*token)->next)->type) {
     case token_closing_curly_brace: {
       return success();
@@ -48,100 +53,71 @@ Result parse_scope(const char* contents, const Token** token, InstructionTable* 
       variable.type = type;
 
       *token = (*token)->next;
-      table_allocate_variable(table, variable);
-      if ((*token)->type != token_semicolon) {
-        AstNode node;
-        token_matches(*token, token_equals_assign);
+
+      if ((*token)->type == token_equals_assign) {
+        AstNode *left = malloc(sizeof(AstNode));
+        left->type = op_value_let;
+        left->token = token1;
+        left->variable = variable;
+
+        AstNode *eq_right = malloc(sizeof(AstNode));
         *token = (*token)->next;
-        forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
+        forward_err(parse_statement(contents, token, globals, functions, token_semicolon, eq_right));
 
-        AstNode eq_left;
-        eq_left.type = op_value_variable;
-        eq_left.token = token1;
-        eq_left.val_type = type;
+        AstNode* node = astnodelist_grow(nodes);
 
-        AstNode eq;
-        eq.type = op_assignment;
-        eq.left = &eq_left;
-        eq.right = &node;
-
-        solve_ast_node(contents, table, globals, functions, literals, &eq);
+        node->type = op_assignment;
+        node->left = left;
+        node->right = eq_right;
+      } else {
+        token_matches(*token, token_semicolon);
+        AstNode *let = astnodelist_grow(nodes);
+        let->type = op_value_let;
+        let->token = token1;
+        let->variable = variable;
       }
       break;
     }
-    case token_asterik: {
-      while ((*token)->type == token_asterik) {
-        deref++;
-        *token = (*token)->next;
-      }
-    }
-    // fall through
+    case token_asterik:
     case token_identifier: {
-      const Token *token1 = *token;
-
-      *token = (*token)->next;
-
-      switch ((*token)->type) {
-      case token_equals_assign: {
-        AstNode node;
-        token_matches(*token, token_equals_assign);
-        *token = (*token)->next;
-        forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
-
-        AstNode eq_left;
-        eq_left.type = op_value_variable;
-        eq_left.token = token1;
-        eq_left.val_type.kind=UNINIT;
-        eq_left.val_type.inner=NULL;
-        AstNode* out = &eq_left;
-        for (int i = 0; i < deref; i++) {
-          AstNode *inner = malloc(sizeof(AstNode));
-          inner->type = op_unary_derefernce;
-          inner->token = token1;
-          inner->inner = out;
-          out = inner;
-        }
-
-        AstNode eq;
-        eq.type = op_assignment;
-        eq.left = out;
-        eq.right = &node;
-
-        solve_ast_node(contents, table, globals, functions, literals, &eq);
-      } break;
-      case token_opening_paren: {
-        char* name = token_copy(token1, contents);
-        const int indexof = functionlist_indexof(functions, name);
-        free(name);
-        if (indexof == -1) {
-          return failure(*token, "unknown function");
-        }
-        forward_err(invoke_function(contents, token, table, globals, functions, functions->array[indexof], output));
-      } break;
-      default:
-        token_matches_ext(*token, token_eof, "invalid id sx");
-        break;
-      }
+      forward_err(parse_statement(contents, token, globals, functions, token_semicolon, astnodelist_grow(nodes)));
       break;
     }
-    case token_cf_if:
-      AstNode condition;
-      forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, &condition));
-      token_matches(*token, token_opening_curly_brace);
-      //todo
-      break;
-    case token_cf_else: {
-      // *token = (*token)->next;
-      // token_matches(*token, opening_curly_brace);
+    case token_cf_if: {
+      AstNode *condition = malloc(sizeof(AstNode));
+      AstNodeList *actions = malloc(sizeof(AstNodeList));
+      AstNodeList *otherwise = malloc(sizeof(AstNodeList));
 
+      forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, condition));
+      token_matches(*token, token_opening_curly_brace);
+      forward_err(parse_scope(contents, token, globals, functions, literals, actions));
+      if ((*token)->type == token_cf_else) {
+        free(otherwise);
+        otherwise = NULL;
+      } else {
+        *token = (*token)->next;
+        if ((*token)->type == token_opening_curly_brace) {
+          forward_err(parse_scope(contents, token, globals, functions, literals, otherwise));
+        } else {
+          token_matches(*token, token_cf_if);
+          forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, condition));
+          token_matches(*token, token_opening_curly_brace);
+          forward_err(parse_scope(contents, token, globals, functions, literals, otherwise));
+        }
+      }
       break;
     }
     case token_cf_return: {
+      AstNode *node = astnodelist_grow(nodes);
+      AstNode *value = malloc(sizeof(AstNode));
       *token = (*token)->next;
-      AstNode node;
-      forward_err(parse_statement(contents, token, globals, functions, token_semicolon, &node));
-      Reference node_allocation = solve_ast_node(contents, table, globals, functions, literals, &node);
-      instruction_unary(table_next(table), table, RET, node_allocation, "Return");
+      forward_err(parse_statement(contents, token, globals, functions, token_semicolon, value));
+
+      node->type = cf_return;
+      node->inner = value;
+      break;
+    }
+    case token_cf_break: {
       break;
     }
     case token_semicolon:

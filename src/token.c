@@ -68,6 +68,8 @@ bool tokenize(const char* data, const size_t len, Token* head) {
             token_push(&next, token_cf_if, i - bufLen, bufLen);
           } else if (sz_strncmp(buffer, "return", bufLen) == 0) {
             token_push(&next, token_cf_return, i - bufLen, bufLen);
+          } else if (sz_strncmp(buffer, "break", bufLen) == 0) {
+            token_push(&next, token_cf_break, i - bufLen, bufLen);
           } else if (sz_strncmp(buffer, "else", bufLen) == 0) {
             token_push(&next, token_cf_else, i - bufLen, bufLen);
           } else {
@@ -329,6 +331,8 @@ const char* token_name(const TokenType type) {
     return "else";
   case token_cf_return:
     return "return";
+  case token_cf_break:
+    return "break";
   case token_equals_assign:
     return "=";
   case token_exclaimation:
