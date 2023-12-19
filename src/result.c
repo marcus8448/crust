@@ -13,14 +13,15 @@ Result success() {
   return success;
 }
 
-Result failure(const Token* at, const char* reason) {
+Result failure(const Token *at, const char *reason) {
   Result error;
   error.at = at;
   error.reason = reason;
   return error;
 }
 
-void print_error(const char* section, const Result result, const char* filename, const char* contents, const size_t len) {
+void print_error(const char *section, const Result result, const char *filename, const char *contents,
+                 const size_t len) {
   int line = 1;
   int lineStart = 0;
   for (int j = 0; j < result.at->index; j++) {

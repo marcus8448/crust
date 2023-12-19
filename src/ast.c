@@ -4,7 +4,7 @@
 LIST_IMPL(Var, var, Variable)
 LIST_IMPL(Function, function, Function)
 
-void function_init(Function* function) {
+void function_init(Function *function) {
   varlist_init(&function->arguments, 2);
   function->name = NULL;
   function->retVal.kind = 0;
@@ -12,7 +12,7 @@ void function_init(Function* function) {
   function->start = NULL;
 }
 
-int functionlist_indexof(const FunctionList* list, const char* name) {
+int functionlist_indexof(const FunctionList *list, const char *name) {
   for (int i = 0; i < list->len; i++) {
     if (strcmp(list->array[i].name, name) == 0) {
       return i;
@@ -21,7 +21,7 @@ int functionlist_indexof(const FunctionList* list, const char* name) {
   return -1;
 }
 
-int functionlist_indexof_tok(const FunctionList* list, const char* contents, const Token* token) {
+int functionlist_indexof_tok(const FunctionList *list, const char *contents, const Token *token) {
   for (int i = 0; i < list->len; i++) {
     if (strncmp(list->array[i].name, contents + token->index, token->len) == 0) {
       return i;
@@ -30,7 +30,7 @@ int functionlist_indexof_tok(const FunctionList* list, const char* contents, con
   return -1;
 }
 
-int varlist_indexof(const VarList* list, const char* name) {
+int varlist_indexof(const VarList *list, const char *name) {
   for (int i = 0; i < list->len; i++) {
     if (strcmp(list->array[i].name, name) == 0) {
       return i;
@@ -127,12 +127,20 @@ int ast_precedence(AstNodeType type) {
     return -1;
   case op_cast:
     return 1;
+  case op_value_let:
+    return -1;
+  case cf_if:
+    return -1;
+  case cf_while:
+    return -1;
+  case cf_return:
+    return -1;
   }
   exit(17);
 }
 
-Result parse_statement(const char* contents, const Token** token, VarList* globals, FunctionList* functions,
-                       const TokenType until, AstNode* node) {
+Result parse_statement(const char *contents, const Token **token, VarList *globals, FunctionList *functions,
+                       const TokenType until, AstNode *node) {
   PtrList values;
   ptrlist_init(&values, 2);
   PtrList operators;
@@ -140,7 +148,7 @@ Result parse_statement(const char* contents, const Token** token, VarList* globa
 
   while ((*token)->type != until) {
     {
-      AstNode* nxt = malloc(sizeof(AstNode));
+      AstNode *nxt = malloc(sizeof(AstNode));
       forward_err(parse_value(contents, token, globals, functions, nxt));
       ptrlist_add(&values, nxt);
     }
@@ -150,14 +158,14 @@ Result parse_statement(const char* contents, const Token** token, VarList* globa
       assert(operators.len + 1 == values.len);
       if (operators.len == 0) {
         assert(values.len == 1);
-        *node = *(AstNode*)values.array[0];
+        *node = *(AstNode *)values.array[0];
       } else {
         int valI = values.len - 1;
-        AstNode* prev = operators.array[operators.len - 1];
+        AstNode *prev = operators.array[operators.len - 1];
         prev->right = values.array[valI--];
         prev->left = values.array[valI--];
         for (int i = operators.len - 2; i >= 0; i--) {
-          AstNode* op = operators.array[i];
+          AstNode *op = operators.array[i];
           op->right = prev;
           op->left = values.array[valI--];
           prev = op;
@@ -167,7 +175,7 @@ Result parse_statement(const char* contents, const Token** token, VarList* globa
       return success();
     }
 
-    AstNode* nxt = malloc(sizeof(AstNode));
+    AstNode *nxt = malloc(sizeof(AstNode));
     switch ((*token)->type) {
     case token_plus:
       nxt->type = op_add;
@@ -233,14 +241,14 @@ Result parse_statement(const char* contents, const Token** token, VarList* globa
       return failure(*token, "U token");
     }
     if (operators.len > 0 &&
-        ast_precedence(nxt->type) >= ast_precedence(((AstNode*)operators.array[operators.len - 1])->type)) {
+        ast_precedence(nxt->type) >= ast_precedence(((AstNode *)operators.array[operators.len - 1])->type)) {
       int valI = values.len - 1;
-      AstNode* prev = operators.array[operators.len - 1];
-      prev->val_type = ((AstNode*)values.array[valI])->val_type;
+      AstNode *prev = operators.array[operators.len - 1];
+      prev->val_type = ((AstNode *)values.array[valI])->val_type;
       prev->right = values.array[valI--];
       prev->left = values.array[valI--];
       for (int i = operators.len - 2; i >= 0; i--) {
-        AstNode* op = operators.array[0];
+        AstNode *op = operators.array[0];
         op->right = prev;
         op->left = values.array[valI--];
       }
@@ -258,8 +266,8 @@ Result parse_statement(const char* contents, const Token** token, VarList* globa
   return failure(*token, "unexp end of stmt");
 }
 
-Result parse_value(const char* contents, const Token** token, VarList* globals, FunctionList* functions,
-                   AstNode* node) {
+Result parse_value(const char *contents, const Token **token, VarList *globals, FunctionList *functions,
+                   AstNode *node) {
   node->token = *token;
 
   switch ((*token)->type) {
@@ -351,7 +359,7 @@ Result parse_value(const char* contents, const Token** token, VarList* globals, 
 
   if ((*token)->next->type == token_keyword_as) {
     *token = (*token)->next;
-    AstNode* node1 = malloc(sizeof(AstNode));
+    AstNode *node1 = malloc(sizeof(AstNode));
     *node1 = *node;
     node->token = *token;
     *token = (*token)->next;
@@ -365,8 +373,8 @@ Result parse_value(const char* contents, const Token** token, VarList* globals, 
   return success();
 }
 
-Result parse_args(const char* contents, const Token** token, Function* function, VarList* vars, FunctionList* functions,
-                  AstNode* inner) {
+Result parse_args(const char *contents, const Token **token, Function *function, VarList *vars, FunctionList *functions,
+                  AstNode *inner) {
   if (function->arguments.len > 0) {
     for (int i = 1; i < function->arguments.len; ++i) {
       parse_statement(contents, token, vars, functions,

@@ -10,13 +10,13 @@ bool isAllocated(const AccessType type) {
   return type == Direct || type == Dereference;
 }
 
-void instructiontable_init(InstructionTable* table, int stackDepth) {
+void instructiontable_init(InstructionTable *table, int stackDepth) {
   instlist_init(&table->instructions, 8);
   ptrlist_init(&table->allocations, 4);
   table->stackDepth = stackDepth;
 }
 
-void table_allocate_arguments(InstructionTable* table, const Function* function) {
+void table_allocate_arguments(InstructionTable *table, const Function *function) {
   // rdi, rsi, rdx, rcx, r8, r9 -> stack
   for (int i = 0; i < function->arguments.len; i++) {
     if (i < 6) {
@@ -27,25 +27,25 @@ void table_allocate_arguments(InstructionTable* table, const Function* function)
     }
   }
 }
-void instructiontable_free(InstructionTable* table) {
+void instructiontable_free(InstructionTable *table) {
   // todo
 }
 
-Reference reference_direct(Allocation* allocation) {
+Reference reference_direct(Allocation *allocation) {
   Reference reference;
   reference.access = Direct;
   reference.allocation = allocation;
   return reference;
 }
 
-Reference reference_deref(Allocation* allocation) {
+Reference reference_deref(Allocation *allocation) {
   Reference reference;
   reference.access = Dereference;
   reference.allocation = allocation;
   return reference;
 }
 
-void instruction_init(Instruction* instruction) {
+void instruction_init(Instruction *instruction) {
   instruction->type = -1;
   instruction->inputs[0].access = UNINIT;
   instruction->inputs[0].allocation = NULL;
@@ -56,8 +56,8 @@ void instruction_init(Instruction* instruction) {
   instruction->comment = NULL;
 }
 
-void instruction_binary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
-                       Reference output, char* comment) {
+void instruction_binary(Instruction *instruction, const InstructionTable *table, InstructionType type, Reference a,
+                        Reference output, char *comment) {
   assert(isAllocated(output.access));
   instruction->type = type;
   instruction->inputs[0] = a;
@@ -68,8 +68,8 @@ void instruction_binary(Instruction* instruction, const InstructionTable* table,
     a.allocation->lastInstr = table->instructions.len - 1;
 }
 
-void instruction_unary(Instruction* instruction, const InstructionTable* table, InstructionType type,
-                       const Reference ref, char* comment) {
+void instruction_unary(Instruction *instruction, const InstructionTable *table, InstructionType type,
+                       const Reference ref, char *comment) {
   assert(isAllocated(ref.access));
   instruction->type = type;
   instruction->inputs[0] = ref;
@@ -78,8 +78,8 @@ void instruction_unary(Instruction* instruction, const InstructionTable* table, 
   ref.allocation->lastInstr = table->instructions.len - 1;
 }
 
-void instruction_ternary(Instruction* instruction, const InstructionTable* table, InstructionType type, Reference a,
-                       Reference b, Reference output, char* comment) {
+void instruction_ternary(Instruction *instruction, const InstructionTable *table, InstructionType type, Reference a,
+                         Reference b, Reference output, char *comment) {
   assert(isAllocated(output.access));
   instruction->type = type;
   instruction->inputs[0] = a;
@@ -93,9 +93,9 @@ void instruction_ternary(Instruction* instruction, const InstructionTable* table
     b.allocation->lastInstr = table->instructions.len - 1;
 }
 
-Allocation* table_allocate(InstructionTable* table) {
-  void** allocation = ptrlist_grow(&table->allocations);
-  Allocation* alloc = *allocation = malloc(sizeof(Allocation));
+Allocation *table_allocate(InstructionTable *table) {
+  void **allocation = ptrlist_grow(&table->allocations);
+  Allocation *alloc = *allocation = malloc(sizeof(Allocation));
 
   alloc->name = NULL;
   alloc->type.kind = -1;
@@ -105,9 +105,9 @@ Allocation* table_allocate(InstructionTable* table) {
   return *allocation;
 }
 
-Allocation* table_allocate_infer_type(InstructionTable* table, Reference a, Reference b) {
-  void** allocation = ptrlist_grow(&table->allocations);
-  Allocation* alloc = *allocation = malloc(sizeof(Allocation));
+Allocation *table_allocate_infer_type(InstructionTable *table, Reference a, Reference b) {
+  void **allocation = ptrlist_grow(&table->allocations);
+  Allocation *alloc = *allocation = malloc(sizeof(Allocation));
 
   alloc->name = NULL;
   if (isAllocated(a.access)) {
@@ -145,7 +145,7 @@ Allocation* table_allocate_infer_type(InstructionTable* table, Reference a, Refe
       alloc->type = b.allocation->type;
     }
   } else {
-    alloc->type.kind = Quad;
+    alloc->type.kind = u64;
     alloc->type.inner = NULL;
     puts("warn: alloc type guess");
   }
@@ -155,8 +155,8 @@ Allocation* table_allocate_infer_type(InstructionTable* table, Reference a, Refe
   return *allocation;
 }
 
-Allocation* table_allocate_from(InstructionTable* table, Reference ref) {
-  Allocation* alloc = table_allocate(table);
+Allocation *table_allocate_from(InstructionTable *table, Reference ref) {
+  Allocation *alloc = table_allocate(table);
   alloc->source.location = Copy;
   alloc->source.reference = ref;
   alloc->source.start = table->instructions.len - 1;
@@ -171,8 +171,8 @@ Allocation* table_allocate_from(InstructionTable* table, Reference ref) {
   return alloc;
 }
 
-Allocation* table_allocate_variable(InstructionTable* table, Variable variable) {
-  Allocation* alloc = table_allocate(table);
+Allocation *table_allocate_variable(InstructionTable *table, Variable variable) {
+  Allocation *alloc = table_allocate(table);
   alloc->source.location = None;
   alloc->source.start = table->instructions.len - 1;
   alloc->type = variable.type;
@@ -181,8 +181,8 @@ Allocation* table_allocate_variable(InstructionTable* table, Variable variable) 
   return alloc;
 }
 
-Allocation* table_allocate_from_variable(InstructionTable* table, Reference ref, Variable variable) {
-  Allocation* alloc = table_allocate(table);
+Allocation *table_allocate_from_variable(InstructionTable *table, Reference ref, Variable variable) {
+  Allocation *alloc = table_allocate(table);
   alloc->source.location = Copy;
   alloc->source.reference = ref;
   alloc->source.start = table->instructions.len - 1;
@@ -192,8 +192,8 @@ Allocation* table_allocate_from_variable(InstructionTable* table, Reference ref,
   return alloc;
 }
 
-Allocation* table_allocate_from_register(InstructionTable* table, uint8_t reg, Type type) {
-  Allocation* alloc = table_allocate(table);
+Allocation *table_allocate_from_register(InstructionTable *table, uint8_t reg, Type type) {
+  Allocation *alloc = table_allocate(table);
   alloc->source.location = Register;
   alloc->source.reg = reg;
   alloc->source.start = table->instructions.len - 1;
@@ -203,8 +203,8 @@ Allocation* table_allocate_from_register(InstructionTable* table, uint8_t reg, T
   return alloc;
 }
 
-Allocation* table_allocate_from_stack(InstructionTable* table, int16_t offset, Type type) {
-  Allocation* alloc = table_allocate(table);
+Allocation *table_allocate_from_stack(InstructionTable *table, int16_t offset, Type type) {
+  Allocation *alloc = table_allocate(table);
   alloc->source.location = Stack;
   alloc->source.offset = offset;
   alloc->source.start = table->instructions.len - 1;
@@ -214,29 +214,29 @@ Allocation* table_allocate_from_stack(InstructionTable* table, int16_t offset, T
   return alloc;
 }
 
-Instruction* table_next(InstructionTable* table) {
-  Instruction* instruction = instlist_grow(&table->instructions);
+Instruction *table_next(InstructionTable *table) {
+  Instruction *instruction = instlist_grow(&table->instructions);
   instruction_init(instruction);
   return instruction;
 }
 
-void statement_init(Statement* statement) {
+void statement_init(Statement *statement) {
   statement->values[0] = NULL;
   statement->values[1] = NULL;
   statement->values[2] = NULL;
 }
 
-Allocation* table_get_variable_by_token(const InstructionTable* table, const char* contents, const Token* token) {
+Allocation *table_get_variable_by_token(const InstructionTable *table, const char *contents, const Token *token) {
   for (int i = 0; i < table->allocations.len; ++i) {
-    if (token_str_cmp(token, contents, ((Allocation*)table->allocations.array[i])->name) == 0) {
+    if (token_str_cmp(token, contents, ((Allocation *)table->allocations.array[i])->name) == 0) {
       return table->allocations.array[i];
     }
   }
   return NULL;
 }
 
-Reference solve_ast_node(const char* contents, InstructionTable* table, VarList* globals, FunctionList* functions,
-                         StrList* literals, AstNode* node) {
+Reference solve_ast_node(const char *contents, InstructionTable *table, VarList *globals, FunctionList *functions,
+                         StrList *literals, AstNode *node) {
   Type u8type = {.kind = u8, .inner = NULL};
   switch (node->type) {
   case op_nop:
@@ -246,7 +246,7 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
   case op_array_index: {
     Reference array = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference index = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation* output = table_allocate_infer_type(table, array, index);
+    Allocation *output = table_allocate_infer_type(table, array, index);
     instruction_ternary(table_next(table), table, ADD, array, index, reference_direct(output), "index");
     return reference_deref(output);
   }
@@ -256,7 +256,8 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
     return solve_ast_node(contents, table, globals, functions, literals, node->right);
   }
   case op_unary_negate: {
-    Reference reference = reference_direct(table_allocate_from(table, solve_ast_node(contents, table, globals, functions, literals, node->inner)));
+    Reference reference = reference_direct(
+        table_allocate_from(table, solve_ast_node(contents, table, globals, functions, literals, node->inner)));
     instruction_unary(table_next(table), table, NEG, reference, "negate");
     return reference;
   }
@@ -272,7 +273,7 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
       return inner;
     }
 
-    Allocation* output = table_allocate(table);
+    Allocation *output = table_allocate(table);
     output->type.kind = ptr;
     output->type.inner = &inner.allocation->type;
     Reference reference = reference_direct(output);
@@ -286,7 +287,7 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
       inner.access = Dereference;
       return inner;
     case Dereference: {
-      Allocation* allocation = table_allocate_from(table, inner);
+      Allocation *allocation = table_allocate_from(table, inner);
       return reference_deref(allocation);
     }
       // case ConstantS:
@@ -297,14 +298,15 @@ Reference solve_ast_node(const char* contents, InstructionTable* table, VarList*
   } break;
   case op_unary_not: {
     Reference inner = solve_ast_node(contents, table, globals, functions, literals, node->inner);
-    Allocation* allocation = table_allocate_from_register(table, al, u8type);
+    Allocation *allocation = table_allocate_from_register(table, al, u8type);
     Reference reference = reference_direct(allocation);
     instruction_ternary(table_next(table), table, TEST, inner, inner, reference, "test not");
     instruction_unary(table_next(table), table, SETE, reference, "sete");
     return reference;
   }
   case op_unary_bitwise_not: {
-    Reference reference = reference_direct(table_allocate_from(table, solve_ast_node(contents, table, globals, functions, literals, node->inner)));
+    Reference reference = reference_direct(
+        table_allocate_from(table, solve_ast_node(contents, table, globals, functions, literals, node->inner)));
     instruction_unary(table_next(table), table, NOT, reference, "not");
     return reference;
   }

@@ -24,7 +24,24 @@ enum RegisterFP {
   xmm15
 };
 
-enum Register64 { rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp, r8, r9, r10, r11, r12, r13, r14, r15 };
+enum Register64 {
+  rax,
+  rbx,
+  rcx,
+  rdx,
+  rsi,
+  rdi,
+  rbp,
+  rsp,
+  r8,
+  r9,
+  r10,
+  r11,
+  r12,
+  r13,
+  r14,
+  r15
+};
 
 enum Register32 {
   eax,
@@ -85,13 +102,13 @@ enum Register8 {
 
 char mnemonic_suffix(Width size);
 char fp_mnemonic_suffix(Width size);
-const char* get_register_mnemonic(Width size, uint8_t index);
+const char *get_register_mnemonic(Width size, uint8_t index);
 
-extern const char* mnemonicFP[16];
-extern const char* mnemonic64[16];
-extern const char* mnemonic32[16];
-extern const char* mnemonic16[16];
-extern const char* mnemonic8[16];
+extern const char *mnemonicFP[16];
+extern const char *mnemonic64[16];
+extern const char *mnemonic32[16];
+extern const char *mnemonic16[16];
+extern const char *mnemonic8[16];
 extern uint8_t argumentRegisters[6];
 extern uint8_t registerPriority[14];
 extern uint8_t calleeSavedRegisters[7];

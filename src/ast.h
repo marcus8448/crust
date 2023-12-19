@@ -5,26 +5,26 @@
 #include "types.h"
 
 typedef struct {
-  char* name;
+  char *name;
   Type type;
 } Variable;
 
 LIST_API(Var, var, Variable)
 
 typedef struct {
-  char* name;
+  char *name;
   VarList arguments;
   Type retVal;
-  const Token* start;
+  const Token *start;
 } Function;
 
 LIST_API(Function, function, Function)
 
-void function_init(Function* function);
+void function_init(Function *function);
 
-int functionlist_indexof(const FunctionList* list, const char* name);
-int functionlist_indexof_tok(const FunctionList* list, const char* contents, const Token* token);
-int varlist_indexof(const VarList* list, const char* name);
+int functionlist_indexof(const FunctionList *list, const char *name);
+int functionlist_indexof_tok(const FunctionList *list, const char *contents, const Token *token);
+int varlist_indexof(const VarList *list, const char *name);
 
 typedef enum {
   op_nop,
@@ -118,7 +118,7 @@ LIST_API(AstNode, astnode, struct AstNode)
 
 typedef struct AstNode {
   AstNodeType type;
-  const Token* token;
+  const Token *token;
 
   union {
     // let x
@@ -126,9 +126,9 @@ typedef struct AstNode {
 
     // control flow
     struct {
-      struct AstNode* condition;
-      AstNodeList* actions;
-      AstNodeList* alternative;
+      struct AstNode *condition;
+      AstNodeList *actions;
+      AstNodeList *alternative;
     };
 
     struct {
@@ -136,22 +136,22 @@ typedef struct AstNode {
       union {
         // binary operators
         struct {
-          struct AstNode* left;
-          struct AstNode* right;
+          struct AstNode *left;
+          struct AstNode *right;
         };
 
         struct {
-          struct AstNode* inner;
+          struct AstNode *inner;
         };
       };
     };
   };
 } AstNode;
 
-Result parse_value(const char* contents, const Token** token, VarList* globals, FunctionList* functions, AstNode* node);
-Result parse_statement(const char* contents, const Token** token, VarList* globals, FunctionList* functions,
-                       TokenType until, AstNode* node);
-Result parse_args(const char* contents, const Token** token, Function* function, VarList* vars, FunctionList* functions,
-                  AstNode* inner);
+Result parse_value(const char *contents, const Token **token, VarList *globals, FunctionList *functions, AstNode *node);
+Result parse_statement(const char *contents, const Token **token, VarList *globals, FunctionList *functions,
+                       TokenType until, AstNode *node);
+Result parse_args(const char *contents, const Token **token, Function *function, VarList *vars, FunctionList *functions,
+                  AstNode *inner);
 
 #endif // AST_H

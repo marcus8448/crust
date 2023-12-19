@@ -10,13 +10,13 @@
 #include "token.h"
 
 typedef struct {
-  const char* filename;
-  char* contents;
+  const char *filename;
+  char *contents;
   size_t len;
 } FileData;
 
-int filedata_load(FileData* data, const char* filename) {
-  FILE* file = fopen(filename, "rb");
+int filedata_load(FileData *data, const char *filename) {
+  FILE *file = fopen(filename, "rb");
   if (file == NULL)
     return 2;
   fseek(file, 0, SEEK_END);
@@ -26,7 +26,7 @@ int filedata_load(FileData* data, const char* filename) {
     puts("file too large");
     return 1;
   }
-  char* contents = malloc(len + 1);
+  char *contents = malloc(len + 1);
   rewind(file);
   fread(contents, len, 1, file);
   fclose(file);
@@ -38,7 +38,7 @@ int filedata_load(FileData* data, const char* filename) {
   return 0;
 }
 
-int main(const int argc, char** argv) {
+int main(const int argc, char **argv) {
   if (argc < 2) {
     if (argv[0] != NULL) {
       printf("Usage: %s <filenames...>\n", argv[0]);
@@ -48,9 +48,9 @@ int main(const int argc, char** argv) {
     return 1;
   }
 
-  FileData* files = malloc(sizeof(FileData) * (argc - 1));
-  Token* tokens = malloc(sizeof(Token) * (argc - 1));
-  StrList* strLiterals = malloc(sizeof(StrList) * (argc - 1));
+  FileData *files = malloc(sizeof(FileData) * (argc - 1));
+  Token *tokens = malloc(sizeof(Token) * (argc - 1));
+  StrList *strLiterals = malloc(sizeof(StrList) * (argc - 1));
 
   for (int i = 1; i < argc; i++) {
     if (filedata_load(&files[i - 1], argv[i]) != 0) {
@@ -70,7 +70,7 @@ int main(const int argc, char** argv) {
   functionlist_init(&functions, 2);
   varlist_init(&globals, 2);
 
-  FILE* output = fopen("output.asm", "wb");
+  FILE *output = fopen("output.asm", "wb");
   for (int i = 0; i < argc - 1; i++) {
     const Result result =
         preprocess_globals(files[i].contents, &tokens[i], &strLiterals[i], &globals, &functions, output);

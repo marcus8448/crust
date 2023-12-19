@@ -67,25 +67,25 @@ typedef enum {
   token_cf_break
 } TokenType;
 
-const char* token_name(TokenType type);
+const char *token_name(TokenType type);
 
 typedef struct Token {
   TokenType type;
-  struct Token* next;
-  struct Token* prev;
+  struct Token *next;
+  struct Token *prev;
 
   int index;
   uint8_t len;
 } Token;
 
-bool token_value_compare(const Token* token, const char* contents, const char* compare);
-char* token_copy(const Token* token, const char* contents);
-void token_copy_to(const Token* token, const char* contents, char* output);
+bool token_value_compare(const Token *token, const char *contents, const char *compare);
+char *token_copy(const Token *token, const char *contents);
+void token_copy_to(const Token *token, const char *contents, char *output);
 
-int token_str_cmp(const Token* token, const char* contents, const char* cmp);
-void token_free(Token* token);
+int token_str_cmp(const Token *token, const char *contents, const char *cmp);
+void token_free(Token *token);
 
-bool tokenize(const char* data, size_t len, Token* head);
+bool tokenize(const char *data, size_t len, Token *head);
 
 LIST_API(Token, token, Token)
 #endif // TOKEN_H

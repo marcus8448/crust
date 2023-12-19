@@ -7,7 +7,7 @@
 #include "struct/list.h"
 #include "types.h"
 
-Result parse_function_declaration(const char* contents, const Token** token, Function* function, bool has_decl) {
+Result parse_function_declaration(const char *contents, const Token **token, Function *function, bool has_decl) {
   *token = (*token)->next;
   token_matches(*token, token_identifier);
   function->name = token_copy(*token, contents);
@@ -61,8 +61,8 @@ Result parse_function_declaration(const char* contents, const Token** token, Fun
   return success();
 }
 
-int add_str_literal(char* contents, const Token* token, StrList* strLiterals, FILE* output) {
-  char* buf = malloc(token->len + 1);
+int add_str_literal(char *contents, const Token *token, StrList *strLiterals, FILE *output) {
+  char *buf = malloc(token->len + 1);
   memcpy(buf, contents + token->index, token->len);
   buf[token->len] = '\0';
   const int index = strlist_indexof(strLiterals, buf);
@@ -76,8 +76,8 @@ int add_str_literal(char* contents, const Token* token, StrList* strLiterals, FI
   return strLiterals->len - 1;
 }
 
-Result preprocess_globals(char* contents, const Token* token, StrList* strLiterals, VarList* variables,
-                          FunctionList* functions, FILE* output) {
+Result preprocess_globals(char *contents, const Token *token, StrList *strLiterals, VarList *variables,
+                          FunctionList *functions, FILE *output) {
   while (token != NULL) {
     switch (token->type) {
     case token_eof:
@@ -124,14 +124,15 @@ Result preprocess_globals(char* contents, const Token* token, StrList* strLitera
       } else {
         token_matches(token, token_equals_assign);
         token = token->next;
-        const Token* value = token;
+        const Token *value = token;
         if (token->type == token_constant) {
           token_matches(token, token_constant);
           token = token->next;
           token_matches(token, token_semicolon);
           const int bytes = size_bytes(typekind_width(type.kind));
           fprintf(output, "%s:\n", variable.name);
-          fprintf(output, "\t.%s\t%.*s\n", size_mnemonic(typekind_width(type.kind)), value->len, contents + value->index);
+          fprintf(output, "\t.%s\t%.*s\n", size_mnemonic(typekind_width(type.kind)), value->len,
+                  contents + value->index);
           fprintf(output, "\t.size\t%s, %i\n", variable.name, bytes);
         } else if (token->type == token_string) {
           token_matches(token, token_string);

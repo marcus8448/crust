@@ -51,7 +51,7 @@ int size_bytes(const Width size) {
   exit(5);
 }
 
-const char* size_mnemonic(const Width size) {
+const char *size_mnemonic(const Width size) {
   switch (size) {
   case Byte:
     return "byte";
@@ -73,7 +73,7 @@ bool is_pointer(const TypeKind kind) {
   return kind == ptr;
 }
 
-Result parse_type(const char* contents, const Token** token, Type* type) {
+Result parse_type(const char *contents, const Token **token, Type *type) {
   int indirection = 0;
   while (*token != NULL) {
     *token = (*token)->next;

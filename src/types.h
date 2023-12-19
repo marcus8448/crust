@@ -35,11 +35,11 @@ typedef struct Type {
   TypeKind kind;
 
   union {
-    struct Type* inner; // only valid with PTR
+    struct Type *inner; // only valid with PTR
   };
 } Type;
 
-Result parse_type(const char* contents, const Token** token, Type* type);
+Result parse_type(const char *contents, const Token **token, Type *type);
 
 Width type_width(Type type);
 int type_size(Type type);
@@ -47,6 +47,6 @@ Width typekind_width(TypeKind type);
 int typekind_size(TypeKind type);
 
 int size_bytes(Width size);
-const char* size_mnemonic(Width size);
+const char *size_mnemonic(Width size);
 
 #endif // TYPES_H

@@ -3,12 +3,13 @@
 #include <malloc.h>
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-void token_push(Token** token, const TokenType type, const size_t index, const uint8_t len) {
+void token_push(Token **token, const TokenType type, const size_t index, const uint8_t len) {
   assert(index < INT_MAX);
   (*token)->type = type;
   (*token)->index = (int)index;
@@ -22,7 +23,7 @@ void token_push(Token** token, const TokenType type, const size_t index, const u
   *token = (*token)->next;
 }
 
-int sz_strncmp(const char* buffer, const char* cmp, const uint8_t len) {
+int sz_strncmp(const char *buffer, const char *cmp, const uint8_t len) {
   if (cmp == NULL)
     return -1;
   if (strlen(cmp) > len)
@@ -30,8 +31,13 @@ int sz_strncmp(const char* buffer, const char* cmp, const uint8_t len) {
   return strncmp(buffer, cmp, len);
 }
 
-bool tokenize(const char* data, const size_t len, Token* head) {
-  typedef enum { any, comment_nl, comment_cl, q_string } Mode;
+bool tokenize(const char *data, const size_t len, Token *head) {
+  typedef enum {
+    any,
+    comment_nl,
+    comment_cl,
+    q_string
+  } Mode;
 
   char buffer[256];
   uint8_t bufLen = 0;
@@ -39,12 +45,12 @@ bool tokenize(const char* data, const size_t len, Token* head) {
   bool escaping = false;
   Mode mode = any;
   char last = 0;
-  Token* next = head;
+  Token *next = head;
   head->prev = NULL;
   head->next = NULL;
 
   for (size_t i = 0; i < len; i++) {
-    Token* previous = next->prev;
+    Token *previous = next->prev;
     const int c = data[i];
     if (c == EOF) {
       continue;
@@ -247,7 +253,7 @@ bool tokenize(const char* data, const size_t len, Token* head) {
   return true;
 }
 
-const char* token_name(const TokenType type) {
+const char *token_name(const TokenType type) {
   switch (type) {
   case token_eof:
     return "EOF";
@@ -343,7 +349,7 @@ const char* token_name(const TokenType type) {
   abort();
 }
 
-bool token_value_compare(const Token* token, const char* contents, const char* compare) {
+bool token_value_compare(const Token *token, const char *contents, const char *compare) {
   contents += token->index;
   for (int i = 0; i < token->len; i++) {
     if (contents[i] != compare[i]) {
@@ -353,18 +359,18 @@ bool token_value_compare(const Token* token, const char* contents, const char* c
   return true;
 }
 
-char* token_copy(const Token* token, const char* contents) {
-  char* str = malloc(token->len + 1);
+char *token_copy(const Token *token, const char *contents) {
+  char *str = malloc(token->len + 1);
   memcpy(str, contents + token->index, token->len);
   str[token->len] = '\0';
   return str;
 }
 
-void token_copy_to(const Token* token, const char* contents, char* output) {
+void token_copy_to(const Token *token, const char *contents, char *output) {
   memcpy(output, contents + token->index, token->len);
 }
 
-int token_str_cmp(const Token* token, const char* contents, const char* cmp) {
+int token_str_cmp(const Token *token, const char *contents, const char *cmp) {
   if (cmp == NULL)
     return -1;
   if (strlen(cmp) > token->len)
@@ -372,14 +378,14 @@ int token_str_cmp(const Token* token, const char* contents, const char* cmp) {
   return strncmp(contents + token->index, cmp, token->len);
 }
 
-void token_free(Token* token) {
+void token_free(Token *token) {
   if (token != NULL) {
     token_free(token->next);
     free(token);
   }
 }
 
-void tokens_init(Token* token) {
+void tokens_init(Token *token) {
   token->index = 0;
   token->len = 0;
   token->next = NULL;

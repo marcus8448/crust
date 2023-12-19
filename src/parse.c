@@ -2,8 +2,8 @@
 
 #include "codegen.h"
 
-Result parse_function(const char* contents, Function* function, VarList* globals, FunctionList* functions,
-                      StrList* literals, FILE* output) {
+Result parse_function(const char *contents, Function *function, VarList *globals, FunctionList *functions,
+                      StrList *literals, FILE *output) {
   assert(contents != NULL);
   if (function->start != NULL) {
     AstNodeList nodes;
@@ -13,7 +13,7 @@ Result parse_function(const char* contents, Function* function, VarList* globals
 
     fprintf(output, "%s:\n", function->name);
     table_allocate_arguments(&table, function);
-    const Token* token = function->start;
+    const Token *token = function->start;
     forward_err(parse_scope(contents, &token, globals, functions, literals, &nodes));
 
     for (int i = 0; i < nodes.len; ++i) {
@@ -29,8 +29,8 @@ Result parse_function(const char* contents, Function* function, VarList* globals
   return success();
 }
 
-Result parse_scope(const char* contents, const Token** token, VarList* globals,
-                   FunctionList* functions, StrList* literals, AstNodeList* nodes) {
+Result parse_scope(const char *contents, const Token **token, VarList *globals, FunctionList *functions,
+                   StrList *literals, AstNodeList *nodes) {
   assert(contents != NULL);
   token_matches(*token, token_opening_curly_brace);
   while ((*token)->next != NULL) {
@@ -42,7 +42,7 @@ Result parse_scope(const char* contents, const Token** token, VarList* globals,
       Variable variable;
       *token = (*token)->next;
       token_matches(*token, token_identifier);
-      const Token* token1 = *token;
+      const Token *token1 = *token;
       variable.name = token_copy(token1, contents);
 
       *token = (*token)->next;
@@ -64,7 +64,7 @@ Result parse_scope(const char* contents, const Token** token, VarList* globals,
         *token = (*token)->next;
         forward_err(parse_statement(contents, token, globals, functions, token_semicolon, eq_right));
 
-        AstNode* node = astnodelist_grow(nodes);
+        AstNode *node = astnodelist_grow(nodes);
 
         node->type = op_assignment;
         node->left = left;
@@ -130,8 +130,8 @@ Result parse_scope(const char* contents, const Token** token, VarList* globals,
   abort();
 }
 
-Result invoke_function(const char* contents, const Token** token, InstructionTable* table, VarList* vars,
-                       FunctionList* function, Function file, FILE* output) {
+Result invoke_function(const char *contents, const Token **token, InstructionTable *table, VarList *vars,
+                       FunctionList *function, Function file, FILE *output) {
   token_matches(*token, token_opening_paren);
   *token = (*token)->next;
   // FIXME todo

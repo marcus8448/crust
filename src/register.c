@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-const char* get_register_mnemonic(const Width size, const uint8_t index) {
+const char *get_register_mnemonic(const Width size, const uint8_t index) {
   if (index < 16) {
     switch (size) {
     case Quad:
@@ -50,19 +50,19 @@ char fp_mnemonic_suffix(const Width size) {
   }
 }
 
-const char* mnemonicFP[16] = {"%xmm0", "%xmm1", "%xmm2",  "%xmm3",  "%xmm4",  "%xmm5",  "%xmm6",  "%xmm7",
+const char *mnemonicFP[16] = {"%xmm0", "%xmm1", "%xmm2",  "%xmm3",  "%xmm4",  "%xmm5",  "%xmm6",  "%xmm7",
                               "%xmm8", "%xmm9", "%xmm10", "%xmm11", "%xmm12", "%xmm13", "%xmm14", "%xmm15"};
 
-const char* mnemonic64[16] = {"%rax", "%rbx", "%rcx", "%rdx", "%rsi", "%rdi", "%rbp", "%rsp",
+const char *mnemonic64[16] = {"%rax", "%rbx", "%rcx", "%rdx", "%rsi", "%rdi", "%rbp", "%rsp",
                               "%r8",  "%r9",  "%r10", "%r11", "%r12", "%r13", "%r14", "%r15"};
 
-const char* mnemonic32[16] = {"%eax", "%ebx", "%ecx",  "%edx",  "%esi",  "%edi",  "%ebp",  "%esp",
+const char *mnemonic32[16] = {"%eax", "%ebx", "%ecx",  "%edx",  "%esi",  "%edi",  "%ebp",  "%esp",
                               "%r8d", "%r9d", "%r10d", "%r11d", "%r12d", "%r13d", "%r14d", "%r15d"};
 
-const char* mnemonic16[16] = {"%ax",  "%bx",  "%cx",   "%dx",   "%si",   "%di",   "%bp",   "%sp",
+const char *mnemonic16[16] = {"%ax",  "%bx",  "%cx",   "%dx",   "%si",   "%di",   "%bp",   "%sp",
                               "%r8w", "%r9w", "%r10w", "%r11w", "%r12w", "%r13w", "%r14w", "%r15w"};
 
-const char* mnemonic8[16] = {"%al",  "%bl",  "%cl",   "%dl",   "%sil",  "%dil",  "%bpl",  "%spl",
+const char *mnemonic8[16] = {"%al",  "%bl",  "%cl",   "%dl",   "%sil",  "%dil",  "%bpl",  "%spl",
                              "%r8b", "%r9b", "%r10b", "%r11b", "%r12b", "%r13b", "%r14b", "%r15b"};
 
 uint8_t argumentRegisters[6] = {rdi, rsi, rdx, rcx, r8, r9};
