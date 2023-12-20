@@ -9,7 +9,7 @@ Result parse_function(const char *contents, Function *function, VarList *globals
     AstNodeList nodes;
     astnodelist_init(&nodes, 16);
     InstructionTable table;
-    instructiontable_init(&table, 0);
+    instructiontable_init(&table);
 
     fprintf(output, "%s:\n", function->name);
     table_allocate_arguments(&table, function);

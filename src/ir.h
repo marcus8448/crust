@@ -9,18 +9,20 @@
 struct Allocation;
 
 typedef enum {
-  None,
-  Stack,
-  Register,
-  Copy
-} InitialLocationType;
+  None = 1,
+  FnArgument,
+  ForceStack,
+  ForceRegister
+} AllocationProperty;
 
 typedef enum {
-  UNINIT,
+  UNINIT = 1,
   Direct,
   Dereference,
   ConstantI,
-  ConstantS
+  ConstantS,
+  GlobalRef,
+  Global
 } AccessType;
 
 bool isAllocated(AccessType type);
@@ -35,20 +37,10 @@ typedef struct Reference {
   };
 } Reference;
 
-typedef struct {
-  InitialLocationType location;
-  int start;
-  union {
-    uint8_t reg;
-    int16_t offset;
-    Reference reference;
-  };
-} InitialLocation;
-
 typedef struct Allocation {
   int index;
   Type type;
-  InitialLocation source;
+  AllocationProperty source;
   const char *name; // NULLABLE
   bool lvalue;
   int lastInstr;
@@ -84,16 +76,11 @@ typedef enum {
   TEST
 } InstructionType;
 
-typedef struct {
+typedef struct Instruction {
   InstructionType type;
-  union {
-    struct {
-      Reference inputs[2];
-      Reference output;
-    };
-
-    char *label; // todo
-  };
+  int id;
+  Reference inputs[2];
+  Reference output;
   char *comment;
 } Instruction;
 
@@ -102,10 +89,10 @@ LIST_API(Instruction, inst, Instruction)
 typedef struct {
   InstructionList instructions;
   PtrList allocations;
-  int stackDepth;
+  int nextIId;
 } InstructionTable;
 
-void instructiontable_init(InstructionTable *table, int stackDepth);
+void instructiontable_init(InstructionTable *table);
 
 void table_allocate_arguments(InstructionTable *table, const Function *function);
 void instructiontable_free(InstructionTable *table);
@@ -115,22 +102,14 @@ Reference reference_deref(Allocation *allocation);
 
 void instruction_init(Instruction *instruction);
 
-void instruction_unary(Instruction *instruction, const InstructionTable *table, InstructionType type, Reference ref,
-                       char *comment);
-void instruction_binary(Instruction *instruction, const InstructionTable *table, InstructionType type, Reference a,
-                        Reference output, char *comment);
-void instruction_ternary(Instruction *instruction, const InstructionTable *table, InstructionType type, Reference a,
-                         Reference b, Reference output, char *comment);
-
 Allocation *table_get_variable_by_token(const InstructionTable *table, const char *contents, const Token *token);
 
-Allocation *table_allocate(InstructionTable *table);
-Allocation *table_allocate_infer_type(InstructionTable *table, Reference a, Reference b);
+Allocation *table_allocate(InstructionTable *table, Type type);
+Allocation *table_allocate_infer_type(InstructionTable *table, Reference a);
+Allocation *table_allocate_infer_types(InstructionTable *table, Reference a, Reference b);
 Allocation *table_allocate_variable(InstructionTable *table, Variable variable);
-Allocation *table_allocate_from_variable(InstructionTable *table, Reference ref, Variable variable);
-Allocation *table_allocate_from(InstructionTable *table, Reference ref);
-Allocation *table_allocate_from_register(InstructionTable *table, uint8_t reg, Type type);
-Allocation *table_allocate_from_stack(InstructionTable *table, int16_t offset, Type type);
+Allocation *table_allocate_register(InstructionTable *table, Type type);
+Allocation *table_allocate_stack(InstructionTable *table, Type type);
 
 Instruction *table_next(InstructionTable *table);
 

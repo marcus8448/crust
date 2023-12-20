@@ -110,7 +110,7 @@ extern const char *mnemonic32[16];
 extern const char *mnemonic16[16];
 extern const char *mnemonic8[16];
 extern uint8_t argumentRegisters[6];
-extern uint8_t registerPriority[14];
+extern int8_t registerPriority[14];
 extern uint8_t calleeSavedRegisters[7];
 extern uint8_t callerSavedRegisters[9];
 #endif // REGISTER_H

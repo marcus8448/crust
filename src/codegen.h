@@ -13,7 +13,7 @@ typedef struct {
   LocationType location;
   union {
     int offset;
-    uint8_t reg;
+    int8_t reg;
   };
 } Storage;
 
@@ -32,11 +32,11 @@ void registers_claim(Registers *registers, Allocation *allocation);
 void registers_make_stack(Registers *registers, Allocation *allocation, FILE *output);
 
 Storage *registers_get_storage(const Registers *registers, Allocation *allocation);
-Allocation *registers_allocationfrom_register(const Registers *registers, InstructionTable *table, uint8_t reg);
+Allocation *registers_allocationfrom_register(const Registers *registers, InstructionTable *table, int8_t reg);
 void registers_move_tostack(Registers *registers, Allocation *allocation, FILE *output);
-void registers_claim_register(Registers *registers, Allocation *output, uint8_t reg);
+void registers_claim_register(Registers *registers, Allocation *output, int8_t reg);
 void registers_claim_stack(const Registers *registers, Allocation *output, int16_t offset);
-void registers_force_register(const Registers *registers, Reference allocation, uint8_t reg, FILE *output);
+void registers_force_register(const Registers *registers, Reference allocation, int8_t reg, FILE *output);
 void registers_override(const Registers *registers, Allocation *output, Allocation *from);
 
 char *registers_get_mnemonic(const Registers *registers, Reference reference);
