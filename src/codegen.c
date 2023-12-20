@@ -26,6 +26,7 @@ void registers_claim(Registers *registers, Allocation *allocation) {
     for (int i = 0; i < 14; ++i) {
       const uint8_t reg = registerPriority[i];
       if (!registers->registers[reg]) {
+        printf("%i -> %s\n", allocation->index, get_register_mnemonic(type_width(allocation->type), reg));
         registers->registers[reg] = true;
         unknown->location = L_Register;
         unknown->reg = reg;
@@ -33,6 +34,7 @@ void registers_claim(Registers *registers, Allocation *allocation) {
       }
     }
     registers->offset -= type_size(allocation->type);
+    printf("%i -> %i\n", allocation->index, registers->offset);
     unknown->location = L_Stack;
     unknown->offset = registers->offset;
     break;
@@ -53,7 +55,8 @@ void registers_make_stack(Registers *registers, Allocation *allocation, FILE *ou
     break;
   }
   case L_Register: {
-    uint8_t reg = unknown->reg;
+    const uint8_t reg = unknown->reg;
+    registers->registers[reg] = false;
     registers->offset -= type_size(allocation->type);
     unknown->location = L_Stack;
     unknown->offset = registers->offset;
@@ -124,9 +127,9 @@ char *registers_get_mnemonic(const Registers *registers, Reference reference) {
     const Storage *storage = registers_get_storage(registers, reference.allocation);
     switch (storage->location) {
     case L_Stack: {
-      char *str = malloc(1 + (storage->offset / 10 + 1) + 6 + 1);
+      char *str = malloc(1 + (abs(storage->offset) / 10 + 1 + (abs(storage->offset) < 0 ? 1 : 0)) + 6 + 1);
       sprintf(str, "%i(%%rbp)", storage->offset);
-      str[1 + (storage->offset / 10 + 1) + 6] = '\0';
+      str[1 + (abs(storage->offset) / 10 + 1 + (abs(storage->offset) < 0 ? 1 : 0)) + 6] = '\0';
       return str;
     }
     case L_Register: {
@@ -143,9 +146,9 @@ char *registers_get_mnemonic(const Registers *registers, Reference reference) {
     const Storage *storage = registers_get_storage(registers, reference.allocation);
     switch (storage->location) {
     case L_Stack: {
-      char *str = malloc(2 + (storage->offset / 10 + 1) + 7 + 1);
-      sprintf(str, "(%i(%%rbp))", storage->offset); // todo fixme oh no
-      str[1 + (storage->offset / 10 + 1) + 6] = '\0';
+      char *str = malloc(abs(storage->offset) / 10 + 1 + (abs(storage->offset) < 0 ? 1 : 0) + 7 + 1);
+      sprintf(str, "%i(%%rbp)", storage->offset); // todo fixme oh no
+      str[1 + (abs(storage->offset) / 10 + 1 + (abs(storage->offset) < 0 ? 1 : 0)) + 6] = '\0';
       return str;
     }
     case L_Register: {
@@ -175,6 +178,20 @@ char *registers_get_mnemonic(const Registers *registers, Reference reference) {
     str[4 + (reference.str / 10 + 1)] = '\0';
     return str;
   }
+  case Global: {
+    const size_t len = strlen(reference.value);
+    char *str = malloc(len + 6 + 1);
+    sprintf(str, "%s(%%rip)", reference.value);
+    str[1 + len] = '\0';
+    return str;
+  }
+  case GlobalRef: {
+    const size_t len = strlen(reference.value);
+    char *str = malloc(1 + len + 1);
+    sprintf(str, "$%s", reference.value);
+    str[1 + len] = '\0';
+    return str;
+  }
   default: {
     assert(false);
     break;
@@ -188,18 +205,29 @@ void binary_mov(const char *instr, Registers *registers, Instruction *instructio
     registers_override(registers, instruction->output.allocation, instruction->inputs[0].allocation);
     return;
   }
+  if (registers_get_storage(registers, instruction->output.allocation)->location == L_None) {
+    registers_claim(registers, instruction->output.allocation);
+  }
+
   fprintf(output, "%s%c %s, %s\n", instr, mnemonic_suffix(type_width(instruction->output.allocation->type)),
           registers_get_mnemonic(registers, instruction->inputs[0]),
           registers_get_mnemonic(registers, instruction->output));
 }
 
 void ret_op(const Registers *registers, const Instruction *instruction, FILE *output) {
-  registers_force_register(registers, instruction->output, rax, output);
+  registers_force_register(registers, instruction->inputs[0], rax, output);
   fputs("ret\n", output);
 }
 
 void ternary_op(const char *instr, Registers *registers, Instruction *instruction, int index, FILE *output) {
-  int src = -1;
+  if (isAllocated(instruction->inputs[0].access)) {
+    assert(registers_get_storage(registers, instruction->inputs[0].allocation)->location != L_None);
+  }
+  if (isAllocated(instruction->inputs[1].access)) {
+    assert(registers_get_storage(registers, instruction->inputs[1].allocation)->location != L_None);
+  }
+
+  int8_t src = -1;
   if (registers_get_storage(registers, instruction->output.allocation)->location == L_None &&
       instruction->output.allocation->source.location == None) {
     if (isAllocated(instruction->inputs[0].access) && instruction->inputs[0].allocation->lastInstr == index) {
@@ -234,22 +262,6 @@ void binary_lea(const char *instr, Registers *registers, Instruction *instructio
           registers_get_mnemonic(registers, instruction->output));
 }
 
-void binary_op(const char *instr, Registers *registers, Instruction *instruction, FILE *output) {
-  // if (instruction->inputs[1].allocation == instruction->output) {
-  //   if (registers_get_storage(registers, instruction->output)->location == L_None) {
-  //     // if (instruction->inputs[1].allocation->lastInstr == index) {
-  //     //   registersreg()
-  //     // }
-  //     // if (instruction->inputs[1].allocation->lastInstr == index) {
-  //     //   registers_force_register()
-  //     // }
-  //     registers_claim(registers, instruction->output);
-  //   }
-  // }
-  fprintf(output, "%s %s, %s\n", instr, registers_get_mnemonic(registers, instruction->inputs[0]),
-          registers_get_mnemonic(registers, instruction->inputs[1]));
-}
-
 void unary_op(const char *instr, Registers *registers, Instruction *instruction, FILE *output) {
   if (instruction->inputs[0].allocation != instruction->output.allocation) {
     fprintf(output, "mov%c %s, %s\n", mnemonic_suffix(type_width(instruction->output.allocation->type)),
@@ -267,7 +279,7 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
     switch (instruction->output.allocation->source.location) {
 
     case None:
-      registers_claim(registers, instruction->output.allocation);
+      // registers_claim(registers, instruction->output.allocation);
       break;
     case Stack: {
       registers_claim_stack(registers, instruction->output.allocation, instruction->output.allocation->source.offset);
@@ -286,12 +298,7 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       break;
     }
     case Copy: {
-      if (instruction->output.allocation->lastInstr > i) {
-        registers_claim_register(registers, instruction->output.allocation, instruction->output.allocation->source.reg);
-        fprintf(output, "mov%c %s, %s\n", mnemonic_suffix(type_width(instruction->output.allocation->type)),
-                registers_get_mnemonic(registers, instruction->output.allocation->source.reference),
-                registers_get_mnemonic(registers, instruction->output));
-      } else {
+      if (instruction->output.allocation->lastInstr == i) {
         *registers_get_storage(registers, instruction->output.allocation) =
             *registers_get_storage(registers, instruction->output.allocation->source.reference.allocation);
         registers_get_storage(registers, instruction->output.allocation->source.reference.allocation)->location =
@@ -302,6 +309,11 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
             puts("mov copy to input");
           }
         }
+      } else {
+        registers_claim_register(registers, instruction->output.allocation, instruction->output.allocation->source.reg);
+        fprintf(output, "mov%c %s, %s\n", mnemonic_suffix(type_width(instruction->output.allocation->type)),
+                registers_get_mnemonic(registers, instruction->output.allocation->source.reference),
+                registers_get_mnemonic(registers, instruction->output));
       }
       break;
     }
@@ -353,6 +365,9 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       case ConstantS:
         break;
       case UNINIT:
+        break;
+      case GlobalRef:
+      case Global:
         break;
       }
     }

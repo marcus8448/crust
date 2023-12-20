@@ -39,11 +39,21 @@ int varlist_indexof(const VarList *list, const char *name) {
   return -1;
 }
 
+Variable *varlist_get_by_token(const VarList *list, const char *contents, const Token *token) {
+  for (int i = 0; i < list->len; i++) {
+    if (token_str_cmp(token, contents, list->array[i].name) == 0) {
+      return &list->array[i];
+    }
+  }
+  return NULL;
+}
+
 int ast_operand_count(AstNodeType type) {
   switch (type) {
   case op_nop:
   case op_value_constant:
   case op_value_variable:
+  case op_value_global:
     return 0;
   case op_unary_negate:
   case op_unary_plus:
@@ -122,6 +132,8 @@ int ast_precedence(AstNodeType type) {
   case op_value_constant:
     return -1;
   case op_value_variable:
+    return -1;
+  case op_value_global:
     return -1;
   case op_nop:
     return -1;
@@ -313,7 +325,7 @@ Result parse_value(const char *contents, const Token **token, VarList *globals, 
     *token = (*token)->next;
     forward_err(parse_value(contents, token, globals, functions, node->inner));
     break;
-  case token_identifier:
+  case token_identifier: {
     switch ((*token)->next->type) {
     case token_opening_paren:
       node->inner = malloc(sizeof(AstNode));
@@ -326,16 +338,23 @@ Result parse_value(const char *contents, const Token **token, VarList *globals, 
       forward_err(parse_args(contents, token, &functions->array[indexof_tok], globals, functions, node->inner));
       break;
     case token_opening_sqbr:
-      node->inner = malloc(sizeof(AstNode));
+      node->left = malloc(sizeof(AstNode));
+      node->right = malloc(sizeof(AstNode));
+      node->left->type = op_value_variable;
+      node->left->token = *token;
       node->type = op_array_index;
       *token = (*token)->next;
-      forward_err(parse_statement(contents, token, globals, functions, token_closing_sqbr, node->inner));
+      node->token = *token;
+      *token = (*token)->next;
+      forward_err(parse_statement(contents, token, globals, functions, token_closing_sqbr, node->right));
+      *token = (*token)->next;
       break;
     default:
       node->type = op_value_variable;
       break;
     }
     break;
+  }
   case token_constant:
     node->type = op_value_constant;
     break;

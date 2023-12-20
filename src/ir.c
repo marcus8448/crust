@@ -101,6 +101,7 @@ Allocation *table_allocate(InstructionTable *table) {
   alloc->type.kind = -1;
   alloc->type.inner = NULL;
   alloc->lvalue = false;
+  alloc->source.location = None;
   alloc->index = table->allocations.len - 1;
   return *allocation;
 }
@@ -108,6 +109,7 @@ Allocation *table_allocate(InstructionTable *table) {
 Allocation *table_allocate_infer_type(InstructionTable *table, Reference a, Reference b) {
   void **allocation = ptrlist_grow(&table->allocations);
   Allocation *alloc = *allocation = malloc(sizeof(Allocation));
+  alloc->source.location = None;
 
   alloc->name = NULL;
   if (isAllocated(a.access)) {
@@ -217,6 +219,7 @@ Allocation *table_allocate_from_stack(InstructionTable *table, int16_t offset, T
 Instruction *table_next(InstructionTable *table) {
   Instruction *instruction = instlist_grow(&table->instructions);
   instruction_init(instruction);
+  instruction->id = table->nextIId++;
   return instruction;
 }
 
@@ -244,11 +247,12 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   case op_function:
     break;
   case op_array_index: {
-    Reference array = solve_ast_node(contents, table, globals, functions, literals, node->left);
-    Reference index = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    Allocation *output = table_allocate_infer_type(table, array, index);
-    instruction_ternary(table_next(table), table, ADD, array, index, reference_direct(output), "index");
-    return reference_deref(output);
+    Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
+    Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
+    Reference output = reference_direct(table_allocate(table));
+    output.allocation->type = *left.allocation->type.inner;
+    instruction_ternary(table_next(table), table, ADD, left, right, output, "add a");
+    return output;
   }
   case op_comma: {
     // discard left, keep right
@@ -272,8 +276,13 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
       inner.access = Direct;
       return inner;
     }
+    if (inner.access == Global) {
+      inner.access = GlobalRef;
+      return inner;
+    }
 
     Allocation *output = table_allocate(table);
+    output->name = "Cxx";
     output->type.kind = ptr;
     output->type.inner = &inner.allocation->type;
     Reference reference = reference_direct(output);
@@ -324,7 +333,7 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     instruction_ternary(table_next(table), table, SUB, left, right, output, "add a");
     return output;
   }
-  case op_multiply: { // fixme
+  case op_multiply: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
     Reference output = reference_direct(table_allocate_infer_type(table, left, right));
@@ -470,6 +479,14 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     Reference reference;
     reference.access = Direct;
     reference.allocation = table_get_variable_by_token(table, contents, node->token);
+    return reference;
+  }
+  case op_value_global: {
+    Reference reference;
+    reference.access = Global;
+    char *copy = token_copy(node->token, contents);
+    assert(varlist_indexof(globals, copy) != -1);
+    reference.value = copy;
     return reference;
   }
   case op_cast:

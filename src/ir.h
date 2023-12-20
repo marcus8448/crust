@@ -20,7 +20,9 @@ typedef enum {
   Direct,
   Dereference,
   ConstantI,
-  ConstantS
+  ConstantS,
+  GlobalRef,
+  Global
 } AccessType;
 
 bool isAllocated(AccessType type);
@@ -86,6 +88,7 @@ typedef enum {
 
 typedef struct {
   InstructionType type;
+  int id;
   union {
     struct {
       Reference inputs[2];
@@ -103,6 +106,7 @@ typedef struct {
   InstructionList instructions;
   PtrList allocations;
   int stackDepth;
+  int nextIId;
 } InstructionTable;
 
 void instructiontable_init(InstructionTable *table, int stackDepth);
