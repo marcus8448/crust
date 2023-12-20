@@ -8,16 +8,6 @@ extern fn malloc(len: i32) -> [u8];
 
 fn main() -> i64 {
     let x: i64;
-    /*let y: i64 = x + 5;
-    let z: [[[i64]]] = &(&(&y));
-
-    let p: [[i64]] = *z;
-
-    let b: [i64] = p[0];
-    *b = 5;
-
-    return *b * 7 - 1 * 2;
-    */
     x = 7;
     x = x + 7;
     return x + 1;
