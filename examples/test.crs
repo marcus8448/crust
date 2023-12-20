@@ -7,11 +7,18 @@ extern fn printf(str: [i8], value: i8);
 extern fn malloc(len: i32) -> [u8];
 
 fn main() -> i64 {
-    let x: i64 = 13;
-    let y: i64 = x + 5;
-    let z: [i64] = &y;
+    let x: i64;
+    /*let y: i64 = x + 5;
+    let z: [[[i64]]] = &(&(&y));
 
-    //*z = 5;
+    let p: [[i64]] = *z;
 
-    return *z * 7 - 1 * 2;
+    let b: [i64] = p[0];
+    *b = 5;
+
+    return *b * 7 - 1 * 2;
+    */
+    x = 7;
+    x = x + 7;
+    return x + 1;
 }

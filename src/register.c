@@ -67,7 +67,7 @@ const char *mnemonic8[16] = {"%al",  "%bl",  "%cl",   "%dl",   "%sil",  "%dil", 
 
 uint8_t argumentRegisters[6] = {rdi, rsi, rdx, rcx, r8, r9};
 // no rbp, rsp
-uint8_t registerPriority[14] = {rbx, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15, rax};
+int8_t registerPriority[14] = {rbx, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15, rax};
 
 uint8_t calleeSavedRegisters[7] = {rbp, rbx, r12, r13, r14, r15, rsp};
 uint8_t callerSavedRegisters[9] = {rax, rcx, rdx, rsi, rdi, r8, r9, r10, r11};

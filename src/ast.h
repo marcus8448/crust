@@ -25,6 +25,7 @@ void function_init(Function *function);
 int functionlist_indexof(const FunctionList *list, const char *name);
 int functionlist_indexof_tok(const FunctionList *list, const char *contents, const Token *token);
 int varlist_indexof(const VarList *list, const char *name);
+Variable *varlist_get_by_token(const VarList *list, const char *contents, const Token *token);
 
 typedef enum {
   op_nop,
@@ -101,8 +102,12 @@ typedef enum {
 
   // <number>
   op_value_constant,
+  // "str"
+  op_value_string,
   // <identifier>
   op_value_variable,
+  // <identifier>
+  op_value_global,
 
   op_value_let,
 
