@@ -9,10 +9,27 @@ bool isAllocated(const AccessType type) {
   return type == Direct || type == Dereference;
 }
 
-void instructiontable_init(InstructionTable *table) {
+void instructiontable_init(InstructionTable *table, char* name) {
   instlist_init(&table->instructions, 8);
   ptrlist_init(&table->allocations, 4);
+  table->parent = NULL;
+  table->name = name;
   table->nextIId = 0;
+  table->parentCutoff = 0;
+  table->sections = malloc(sizeof(int));
+}
+
+void instructiontable_child(InstructionTable *table, const InstructionTable *parent) {
+  instlist_init(&table->instructions, 8);
+  ptrlist_init(&table->allocations, parent->allocations.capacity);
+  table->parent = parent;
+  table->name = parent->name;
+  table->nextIId = 0;
+  table->sections = parent->sections;
+  table->parentCutoff = parent->allocations.len;
+  for (int i = 0; i < parent->allocations.len; ++i) {
+    ptrlist_add(&table->allocations, parent->allocations.array[i]);
+  }
 }
 
 void table_allocate_arguments(InstructionTable *table, const Function *function) {
@@ -113,6 +130,41 @@ Allocation *table_allocate_infer_types(InstructionTable *table, Reference a, Ref
   return *allocation;
 }
 
+Type ref_infer_type(Reference a, Reference b) {
+  if (isAllocated(a.access)) {
+    if (isAllocated(b.access)) {
+      if (a.allocation->name != NULL) {
+        if (a.access == Dereference) {
+          return *a.allocation->type.inner;
+        }
+        return a.allocation->type;
+      }
+      if (b.allocation->name != NULL) {
+        if (b.access == Dereference) {
+          return *b.allocation->type.inner;
+        }
+        return b.allocation->type;
+      }
+      if (a.access == Dereference) {
+        return *a.allocation->type.inner;
+      }
+      return a.allocation->type;
+    }
+    if (a.access == Dereference) {
+      return *a.allocation->type.inner;
+    }
+    return a.allocation->type;
+  }
+  if (isAllocated(b.access)) {
+    if (b.access == Dereference) {
+      return *b.allocation->type.inner;
+    }
+    return b.allocation->type;
+  }
+  puts("warn: type guess");
+  return (Type){.kind = u64, .inner = NULL};
+}
+
 Allocation *table_allocate_infer_type(InstructionTable *table, Reference ref) {
   Type type = {.kind = i64, .inner = NULL};
   if (isAllocated(ref.access)) {
@@ -165,7 +217,6 @@ Reference instruction_mov(InstructionTable *table, const Reference from, Referen
   instruction->comment = comment;
 
   update_reference(instruction, from);
-  // update_reference(instruction, to);
   return to;
 }
 
@@ -179,7 +230,6 @@ Reference instruction_lea(InstructionTable *table, const Reference from, const R
   instruction->comment = comment;
 
   update_reference(instruction, from);
-  // update_reference(instruction, to);
   return to;
 }
 
@@ -192,9 +242,7 @@ Reference instruction_basic_op(InstructionTable *table, const InstructionType ty
   instruction->output = output;
   instruction->comment = comment;
 
-  // update_reference(instruction, a);
   update_reference(instruction, b);
-  // update_reference(instruction, output);
   return output;
 }
 
@@ -227,7 +275,6 @@ Reference instruction_sp_reg_read(InstructionTable *table, const InstructionType
   instruction->output = reference_direct(allocation);
   instruction->comment = comment;
 
-  // update_reference(instruction, instruction->output);
   return instruction->output;
 }
 
@@ -258,7 +305,7 @@ Reference instr_test_self(InstructionTable *table, const InstructionType type, c
   return instruction_sp_reg_read(table, type, comment);
 }
 
-Reference instr_cmp_self(InstructionTable *table, const InstructionType type, const Reference left,
+Reference instr_cmp_chk(InstructionTable *table, const InstructionType type, const Reference left,
                          const Reference right, char *comment) {
   instruction_no_output(table, CMP, left, right, NULL);
 
@@ -273,6 +320,44 @@ void instruction_unary(InstructionTable *table, InstructionType type, Reference 
   instruction->comment = comment;
 
   update_reference(instruction, reference);
+}
+
+int table_allocate_label(InstructionTable *table) {
+  *table->sections = *table->sections + 1;
+  return *table->sections;
+}
+
+void instruction_jump(InstructionTable * table, int label) {
+  Instruction *instruction = table_next(table);
+  instruction->type = JMP;
+  instruction->label = label;
+  instruction->instructions.parent = NULL;
+}
+
+int instruction_label(InstructionTable * table, int label) {
+  Instruction *instruction = table_next(table);
+  instruction->type = LABEL;
+  instruction->label = label;
+  instruction->instructions.parent = NULL;
+  return instruction->id;
+}
+
+Instruction *instruction_jump_code(InstructionTable *table, const char *contents, VarList *globals, FunctionList *functions,
+                           StrList *literals, InstructionType type, int label, AstNodeList *actions) {
+  Instruction *instruction = table_next(table);
+  instruction->type = type;
+  instruction->label = table_allocate_label(table);
+
+  instructiontable_child(&instruction->instructions, table);
+
+  instruction_label(&instruction->instructions, instruction->label);
+
+  for (int i = 0; i < actions->len; ++i) {
+    solve_ast_node(contents, &instruction->instructions, globals, functions, literals, &actions->array[i]);
+  }
+
+  instruction_jump(&instruction->instructions, label);
+  return instruction;
 }
 
 Reference solve_ast_node(const char *contents, InstructionTable *table, VarList *globals, FunctionList *functions,
@@ -396,32 +481,32 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   case op_compare_equals: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETE, left, right, "==");
+    return instr_cmp_chk(table, SETE, left, right, "==");
   }
   case op_compare_not_equals: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETNE, left, right, "!=");
+    return instr_cmp_chk(table, SETNE, left, right, "!=");
   }
   case op_less_than: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETL, left, right, "<");
+    return instr_cmp_chk(table, SETL, left, right, "<");
   }
   case op_greater_than: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETG, left, right, ">");
+    return instr_cmp_chk(table, SETG, left, right, ">");
   }
   case op_less_than_equal: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETLE, left, right, "<=");
+    return instr_cmp_chk(table, SETLE, left, right, "<=");
   }
   case op_greater_than_equal: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETGE, left, right, ">=");
+    return instr_cmp_chk(table, SETGE, left, right, ">=");
   }
   case op_value_constant: {
     Reference reference;
@@ -455,8 +540,22 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     break;
   case op_value_let:
     return reference_direct(table_allocate_variable(table, node->variable));
-  case cf_if:
-    break;
+  case cf_if: {
+    instruction_no_output(table, CMP, (Reference) { .access = ConstantI, .value = strdup("0")},
+      solve_ast_node(contents, table, globals, functions, literals, node->condition), NULL);
+    int label = table_allocate_label(table);
+    Instruction *i = instruction_jump_code(table, contents, globals, functions, literals, JNE, label, node->actions);
+    Instruction *j = NULL;
+    if (node->alternative != NULL) {
+      j = instruction_jump_code(table, contents, globals, functions, literals, JMP, label, node->alternative);
+    } else {
+      instruction_jump(table, label);
+    }
+    int idx = instruction_label(table, label);
+    i->escape = idx;
+    if (j != NULL) j->escape = idx;
+    return reference_direct(NULL);
+  }
   case cf_while:
     break;
   case cf_return: {

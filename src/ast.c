@@ -367,14 +367,12 @@ Result parse_value(const char *contents, const Token **token, VarList *globals, 
   case token_keyword_as:
     node->type = op_cast;
     break;
-  // case token_cf_if:
-  //     break;
-  // case token_cf_else:
-  //     break;
-  // case token_cf_return:
-  //     break;
-  // case token_cf_break:
-  //     break;
+  case token_cf_if:
+  case token_cf_else:
+  case token_cf_return:
+  case token_cf_break:
+    exit(43);
+    break;
   default:
     return failure(*token, "unkon");
   }

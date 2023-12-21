@@ -4,36 +4,59 @@
 
 #include <string.h>
 
-inline void write_unary_op(const Registers *registers, const char *op, const Width width, const Reference ref, FILE *output) {
+void write_jmp(const InstructionTable *table, const char *op, int label, FILE *output) {
+  fprintf(output, "\t%s .LBL.%s.%i\n", op, table->name, label);
+  fprintf(stdout, "\t%s .LBL.%s.%i\n", op, table->name, label);
+}
+
+void write_unary_op(const Registers *registers, const char *op, const Width width, const Reference ref, FILE *output) {
   fprintf(output, "\t%s%c %s\n", op, mnemonic_suffix(width), registers_get_mnemonic(registers, ref));
   fprintf(stdout, "\t%s%c %s\n", op, mnemonic_suffix(width), registers_get_mnemonic(registers, ref));
 }
 
-inline void write_binary_op(const Registers *registers, const char *op, const Width width, const Reference a,
+void write_binary_op(const Registers *registers, const char *op, const Width width, const Reference a,
                             const Reference b, FILE *output) {
   fprintf(output, "\t%s%c %s, %s\n", op, mnemonic_suffix(width), registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
   fprintf(stdout, "\t%s%c %s, %s\n", op, mnemonic_suffix(width), registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
 }
 
-inline void write_ternary_op(const Registers *registers, const char *op, const Width width, const Reference a,
+void write_cmp_op(const Registers *registers, const char *op, const Reference a,
+                            const Reference b, FILE *output) {
+  fprintf(output, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(ref_infer_type(a, b))), registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
+  fprintf(stdout, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(ref_infer_type(a, b))), registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
+}
+
+void write_ternary_op(const Registers *registers, const char *op, const Width width, const Reference a,
                              const Reference b, const Reference c, FILE *output) {
   fprintf(output, "\t%s%c %s, %s, %s\n", op, mnemonic_suffix(width), registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b), registers_get_mnemonic(registers, c));
   fprintf(stdout, "\t%s%c %s, %s, %s\n", op, mnemonic_suffix(width), registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b), registers_get_mnemonic(registers, c));
 }
 
-inline void write_mov_into_stack(const Registers *registers, const Width width, const Reference ref,
+void write_mov_into_stack(const Registers *registers, const Width width, const Reference ref,
                                  const int16_t offset, FILE *output) {
   fprintf(output, "\tmov%c %s, %i(%%rbp)\n", mnemonic_suffix(width), registers_get_mnemonic(registers, ref), offset);
   fprintf(stdout, "\tmov%c %s, %i(%%rbp)\n", mnemonic_suffix(width), registers_get_mnemonic(registers, ref), offset);
 }
 
-inline void write_mov_into_register(const Registers *registers, const Width width, const Reference ref,
+void write_mov_into_register(const Registers *registers, const Width width, const Reference ref,
                                     const int8_t reg, FILE *output) {
   fprintf(output, "\tmov%c %s, %s\n", mnemonic_suffix(width), registers_get_mnemonic(registers, ref), get_register_mnemonic(width, reg));
   fprintf(stdout, "\tmov%c %s, %s\n", mnemonic_suffix(width), registers_get_mnemonic(registers, ref), get_register_mnemonic(width, reg));
 }
 
 void registers_init(Registers *registers, InstructionTable *table) {
+  for (int i = 0; i < 16; ++i) {
+    registers->registers[i] = false;
+  }
+  registers->offset = 0;
+  registers->storage = malloc(sizeof(Storage) * table->allocations.len);
+  for (int i = 0; i < table->allocations.len; ++i) {
+    registers->storage[i].location = L_None;
+  }
+}
+
+
+void registers_init_child(Registers *registers, InstructionTable *table, const Registers *parent) {
   for (int i = 0; i < 16; ++i) {
     registers->registers[i] = false;
   }
@@ -351,17 +374,60 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       write_binary_op(registers, "sar", type_width(instruction->output.allocation->type), instruction->inputs[0], instruction->output, output);
       break;
     case CMP:
-      write_binary_op(registers, "cmp", type_width(instruction->output.allocation->type), instruction->inputs[0], instruction->inputs[1], output);
+      write_cmp_op(registers, "cmp", instruction->inputs[0], instruction->inputs[1], output);
       break;
     case TEST:
-      write_binary_op(registers, "sar", type_width(instruction->output.allocation->type), instruction->inputs[0], instruction->inputs[1], output);
+      write_cmp_op(registers, "test", instruction->inputs[0], instruction->inputs[1], output);
       break;
     case RET:
       write_mov_into_register(registers, Quad, instruction->inputs[0], rax, output);
       fputs("\tret\n", output);
       break;
+    case LABEL:
+      fprintf(output, ".LBL.%s.%i:\n", table->name, instruction->label);
+      fprintf(stdout, ".LBL.%s.%i:\n", table->name, instruction->label);
+      break;
+    case JMP:
+      write_jmp(table, "jmp", instruction->label, output);
+      break;
+    case JE:
+      write_jmp(table, "je", instruction->label, output);
+      break;
+    case JNE:
+      write_jmp(table, "jne", instruction->label, output);
+      break;
+    case JG:
+      write_jmp(table, "jg", instruction->label, output);
+      break;
+    case JL:
+      write_jmp(table, "jl", instruction->label, output);
+      break;
+    case JGE:
+      write_jmp(table, "jge", instruction->label, output);
+      break;
+    case JLE:
+      write_jmp(table, "jle", instruction->label, output);
+      break;
+    }
+    fflush(output);
+  }
+  for (int i = 0; i < table->instructions.len; ++i) {
+    Instruction *instruction = table->instructions.array + i;
+    switch (instruction->type) {
+    case JMP:
+    case JE:
+    case JNE:
+    case JG:
+    case JL:
+    case JGE:
+    case JLE:
+      if (instruction->instructions.parent != NULL) {
+        Registers subregisters;
+        registers_init_child(&subregisters, &instruction->instructions, registers);
+        generate_statement(&subregisters, contents, &instruction->instructions, globals, functions, literals, output);
+      }
+      break;
     default:
-      assert(false);
       break;
     }
     fflush(output);

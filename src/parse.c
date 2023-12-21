@@ -9,7 +9,7 @@ Result parse_function(const char *contents, Function *function, VarList *globals
     AstNodeList nodes;
     astnodelist_init(&nodes, 16);
     InstructionTable table;
-    instructiontable_init(&table);
+    instructiontable_init(&table, function->name);
 
     fprintf(output, "%s:\n", function->name);
     table_allocate_arguments(&table, function);
@@ -84,25 +84,28 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
       break;
     }
     case token_cf_if: {
-      AstNode *condition = malloc(sizeof(AstNode));
-      AstNodeList *actions = malloc(sizeof(AstNodeList));
-      AstNodeList *otherwise = malloc(sizeof(AstNodeList));
+      AstNode *node = astnodelist_grow(nodes);
+      node->type = cf_if;
+      node->condition = malloc(sizeof(AstNode));
+      node->actions = malloc(sizeof(AstNodeList));
+      node->alternative = malloc(sizeof(AstNodeList));
 
-      forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, condition));
+      *token = (*token)->next;
+      forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, node->condition));
       token_matches(*token, token_opening_curly_brace);
-      forward_err(parse_scope(contents, token, globals, functions, literals, actions));
-      if ((*token)->type == token_cf_else) {
-        free(otherwise);
-        otherwise = NULL;
+      forward_err(parse_scope(contents, token, globals, functions, literals, node->actions));
+      if ((*token)->type != token_cf_else) {
+        free(node->alternative);
+        node->alternative = NULL;
       } else {
         *token = (*token)->next;
         if ((*token)->type == token_opening_curly_brace) {
-          forward_err(parse_scope(contents, token, globals, functions, literals, otherwise));
+          forward_err(parse_scope(contents, token, globals, functions, literals, node->alternative));
         } else {
           token_matches(*token, token_cf_if);
-          forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, condition));
+          forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, node->condition));
           token_matches(*token, token_opening_curly_brace);
-          forward_err(parse_scope(contents, token, globals, functions, literals, otherwise));
+          forward_err(parse_scope(contents, token, globals, functions, literals, node->alternative));
         }
       }
       break;

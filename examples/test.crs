@@ -7,8 +7,9 @@ extern fn printf(str: [i8], value: i8);
 extern fn malloc(len: i32) -> [u8];
 
 fn main() -> i64 {
-    let x: i64;
-    x = 7;
-    x = x + 7;
+    let x: i64 = 7;
+    if (x) {
+      x = 3;
+    }
     return x + 1;
 }

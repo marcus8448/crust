@@ -26,6 +26,7 @@ typedef struct {
 } Registers;
 
 void registers_init(Registers *registers, InstructionTable *table);
+void registers_init_child(Registers *registers, InstructionTable *table, const Registers *parent);
 void registers_free(Registers *registers);
 
 void registers_claim(Registers *registers, Allocation *allocation);

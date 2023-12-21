@@ -47,6 +47,8 @@ typedef struct Allocation {
 } Allocation;
 
 typedef enum {
+  LABEL,
+
   NEG,
 
   SETE,
@@ -55,6 +57,14 @@ typedef enum {
   SETNE,
   SETLE,
   SETGE,
+
+  JMP,
+  JE,
+  JNE,
+  JG,
+  JL,
+  JGE,
+  JLE,
 
   CALL, // todo
   RET,
@@ -76,23 +86,39 @@ typedef enum {
   TEST
 } InstructionType;
 
-typedef struct Instruction {
-  InstructionType type;
-  int id;
-  Reference inputs[2];
-  Reference output;
-  char *comment;
-} Instruction;
+LIST_API(Instruction, inst, struct Instruction)
 
-LIST_API(Instruction, inst, Instruction)
-
-typedef struct {
+typedef struct InstructionTable {
+  const struct InstructionTable* parent;
   InstructionList instructions;
   PtrList allocations;
   int nextIId;
+  int *sections;
+  int parentCutoff;
+  char *name;
 } InstructionTable;
 
-void instructiontable_init(InstructionTable *table);
+typedef struct Instruction {
+  InstructionType type;
+  int id;
+  union {
+    struct {
+      Reference inputs[2];
+      Reference output;
+      char *comment;
+    };
+    struct {
+      int label;
+      union {
+        InstructionTable instructions;
+        int escape;
+      };
+    };
+  };
+} Instruction;
+
+void instructiontable_init(InstructionTable *table, char *name);
+void instructiontable_child(InstructionTable *table, const InstructionTable *parent);
 
 void table_allocate_arguments(InstructionTable *table, const Function *function);
 void instructiontable_free(InstructionTable *table);
@@ -112,6 +138,8 @@ Allocation *table_allocate_register(InstructionTable *table, Type type);
 Allocation *table_allocate_stack(InstructionTable *table, Type type);
 
 Instruction *table_next(InstructionTable *table);
+
+Type ref_infer_type(Reference a, Reference b);
 
 typedef struct {
   Width size;
