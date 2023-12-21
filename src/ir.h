@@ -47,6 +47,8 @@ typedef struct Allocation {
 } Allocation;
 
 typedef enum {
+  LABEL,
+
   NEG,
 
   SETE,
@@ -55,6 +57,8 @@ typedef enum {
   SETNE,
   SETLE,
   SETGE,
+
+  JE,
 
   CALL, // todo
   RET,
@@ -76,15 +80,24 @@ typedef enum {
   TEST
 } InstructionType;
 
+LIST_API(Instruction, inst, struct Instruction)
+
 typedef struct Instruction {
   InstructionType type;
   int id;
-  Reference inputs[2];
-  Reference output;
-  char *comment;
+  union {
+    struct {
+      Reference inputs[2];
+      Reference output;
+      char *comment;
+    };
+    struct {
+      char* label;
+      InstructionList instructions;
+    };
+  };
 } Instruction;
 
-LIST_API(Instruction, inst, Instruction)
 
 typedef struct {
   InstructionList instructions;

@@ -165,7 +165,6 @@ Reference instruction_mov(InstructionTable *table, const Reference from, Referen
   instruction->comment = comment;
 
   update_reference(instruction, from);
-  // update_reference(instruction, to);
   return to;
 }
 
@@ -179,7 +178,6 @@ Reference instruction_lea(InstructionTable *table, const Reference from, const R
   instruction->comment = comment;
 
   update_reference(instruction, from);
-  // update_reference(instruction, to);
   return to;
 }
 
@@ -192,9 +190,7 @@ Reference instruction_basic_op(InstructionTable *table, const InstructionType ty
   instruction->output = output;
   instruction->comment = comment;
 
-  // update_reference(instruction, a);
   update_reference(instruction, b);
-  // update_reference(instruction, output);
   return output;
 }
 
@@ -227,7 +223,6 @@ Reference instruction_sp_reg_read(InstructionTable *table, const InstructionType
   instruction->output = reference_direct(allocation);
   instruction->comment = comment;
 
-  // update_reference(instruction, instruction->output);
   return instruction->output;
 }
 
@@ -258,7 +253,7 @@ Reference instr_test_self(InstructionTable *table, const InstructionType type, c
   return instruction_sp_reg_read(table, type, comment);
 }
 
-Reference instr_cmp_self(InstructionTable *table, const InstructionType type, const Reference left,
+Reference instr_cmp_chk(InstructionTable *table, const InstructionType type, const Reference left,
                          const Reference right, char *comment) {
   instruction_no_output(table, CMP, left, right, NULL);
 
@@ -396,32 +391,32 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   case op_compare_equals: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETE, left, right, "==");
+    return instr_cmp_chk(table, SETE, left, right, "==");
   }
   case op_compare_not_equals: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETNE, left, right, "!=");
+    return instr_cmp_chk(table, SETNE, left, right, "!=");
   }
   case op_less_than: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETL, left, right, "<");
+    return instr_cmp_chk(table, SETL, left, right, "<");
   }
   case op_greater_than: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETG, left, right, ">");
+    return instr_cmp_chk(table, SETG, left, right, ">");
   }
   case op_less_than_equal: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETLE, left, right, "<=");
+    return instr_cmp_chk(table, SETLE, left, right, "<=");
   }
   case op_greater_than_equal: {
     Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
     Reference right = solve_ast_node(contents, table, globals, functions, literals, node->right);
-    return instr_cmp_self(table, SETGE, left, right, ">=");
+    return instr_cmp_chk(table, SETGE, left, right, ">=");
   }
   case op_value_constant: {
     Reference reference;
@@ -455,8 +450,13 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     break;
   case op_value_let:
     return reference_direct(table_allocate_variable(table, node->variable));
-  case cf_if:
+  case cf_if: {
+    instruction_no_output(table, CMP, solve_ast_node(contents, table, globals, functions, literals, node->condition),
+      (Reference) { .access = ConstantI, .value = strdup("0")}, NULL);
+    // instruction_label(table, JE);
+
     break;
+  }
   case cf_while:
     break;
   case cf_return: {
