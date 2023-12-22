@@ -1,15 +1,13 @@
-let x: i64;
-let y: i32 = 123;
-let z: i8 = 4;
-let a: [u8] = "";
-
-extern fn printf(str: [i8], value: i8);
-extern fn malloc(len: i32) -> [u8];
-
 fn main() -> i64 {
-    let x: i64 = 7;
-    if (x) {
-      x = 3;
-    }
-    return x + 1;
+    let x: i64 = 11;
+    let y: i64 = 45;
+    let z: i64 = -23;
+
+    let ref: [i64] = &z;
+
+    z = x * 2;
+
+    x = *ref + y;
+
+    return x + 2 * 6 - 1;
 }

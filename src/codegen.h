@@ -17,12 +17,19 @@ typedef struct {
   };
 } Storage;
 
+typedef struct {
+  bool inUse;
+  bool mustRestore;
+  int16_t restoreOffset;
+} RegisterState;
+
 LIST_API(Storage, storage, Storage)
 
-typedef struct {
-  bool registers[16];
+typedef struct Registers {
+  RegisterState registers[16];
   int offset;
   Storage *storage;
+  int parentCutoff;
 } Registers;
 
 void registers_init(Registers *registers, InstructionTable *table);
@@ -33,7 +40,6 @@ void registers_claim(Registers *registers, Allocation *allocation);
 void registers_make_stack(Registers *registers, Allocation *allocation, FILE *output);
 
 Storage *registers_get_storage(const Registers *registers, Allocation *allocation);
-Allocation *registers_allocationfrom_register(const Registers *registers, InstructionTable *table, int8_t reg);
 void registers_move_tostack(Registers *registers, Allocation *allocation, FILE *output);
 void registers_claim_register(Registers *registers, Allocation *output, int8_t reg);
 void registers_claim_stack(const Registers *registers, Allocation *output, int16_t offset);
