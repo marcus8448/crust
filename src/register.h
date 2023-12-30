@@ -113,4 +113,5 @@ extern uint8_t argumentRegisters[6];
 extern int8_t registerPriority[14];
 extern uint8_t calleeSavedRegisters[7];
 extern uint8_t callerSavedRegisters[9];
+extern bool calleeSavedRegistersI[16];
 #endif // REGISTER_H

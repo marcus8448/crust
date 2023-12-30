@@ -4,8 +4,6 @@
 #include "struct/list.h"
 #include "types.h"
 
-#include <stdint.h>
-
 struct Allocation;
 
 typedef enum {
@@ -14,6 +12,16 @@ typedef enum {
   ForceStack,
   ForceRegister
 } AllocationProperty;
+
+typedef struct {
+  AllocationProperty prop;
+  union {
+    struct {
+      int8_t reg;
+      int16_t offset;
+    };
+  };
+} AllocationSource;
 
 typedef enum {
   UNINIT = 1,
@@ -40,7 +48,7 @@ typedef struct Reference {
 typedef struct Allocation {
   int index;
   Type type;
-  AllocationProperty source;
+  AllocationSource source;
   const char *name; // NULLABLE
   bool lvalue;
   int lastInstr;
@@ -89,7 +97,7 @@ typedef enum {
 LIST_API(Instruction, inst, struct Instruction)
 
 typedef struct InstructionTable {
-  const struct InstructionTable* parent;
+  const struct InstructionTable *parent;
   InstructionList instructions;
   PtrList allocations;
   int nextIId;

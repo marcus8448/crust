@@ -90,6 +90,9 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
       node->actions = malloc(sizeof(AstNodeList));
       node->alternative = malloc(sizeof(AstNodeList));
 
+      astnodelist_init(node->actions, 16);
+      astnodelist_init(node->alternative, 16);
+
       *token = (*token)->next;
       forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, node->condition));
       token_matches(*token, token_opening_curly_brace);

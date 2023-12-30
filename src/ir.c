@@ -1,5 +1,6 @@
 #include "ir.h"
 
+#include "register.h"
 #include "util.h"
 #include <string.h>
 
@@ -9,7 +10,7 @@ bool isAllocated(const AccessType type) {
   return type == Direct || type == Dereference;
 }
 
-void instructiontable_init(InstructionTable *table, char* name) {
+void instructiontable_init(InstructionTable *table, char *name) {
   instlist_init(&table->instructions, 8);
   ptrlist_init(&table->allocations, 4);
   table->parent = NULL;
@@ -17,6 +18,7 @@ void instructiontable_init(InstructionTable *table, char* name) {
   table->nextIId = 0;
   table->parentCutoff = 0;
   table->sections = malloc(sizeof(int));
+  *table->sections = 0;
 }
 
 void instructiontable_child(InstructionTable *table, const InstructionTable *parent) {
@@ -26,17 +28,25 @@ void instructiontable_child(InstructionTable *table, const InstructionTable *par
   table->name = parent->name;
   table->nextIId = 0;
   table->sections = parent->sections;
-  table->parentCutoff = parent->allocations.len;
+  table->parentCutoff = table->parentCutoff;
   for (int i = 0; i < parent->allocations.len; ++i) {
     ptrlist_add(&table->allocations, parent->allocations.array[i]);
   }
 }
 
 void table_allocate_arguments(InstructionTable *table, const Function *function) {
-  // rdi, rsi, rdx, rcx, r8, r9 -> stack
+  // rdi, rsi, rdx, rcx, r8, r9, <stack>
+  int16_t offset = 0;
   for (int i = 0; i < function->arguments.len; i++) {
     Allocation *allocation = table_allocate(table, function->arguments.array[i].type);
-    allocation->source = FnArgument;
+    allocation->source.prop = FnArgument;
+    if (i < 6) {
+      allocation->source.reg = argumentRegisters[i];
+    } else {
+      offset += (int16_t)size_bytes(type_width(allocation->type));
+      allocation->source.offset = offset;
+    }
+    allocation->name = function->arguments.array[i].name;
   }
 }
 
@@ -77,7 +87,7 @@ Allocation *table_allocate(InstructionTable *table, Type type) {
   alloc->type = type;
   alloc->lvalue = false;
   alloc->index = table->allocations.len - 1;
-  alloc->source = None;
+  alloc->source.prop = None;
   return *allocation;
 }
 
@@ -126,6 +136,7 @@ Allocation *table_allocate_infer_types(InstructionTable *table, Reference a, Ref
     puts("warn: alloc type guess");
   }
 
+  alloc->source.prop = None;
   alloc->index = table->allocations.len - 1;
   return *allocation;
 }
@@ -181,13 +192,13 @@ Allocation *table_allocate_variable(InstructionTable *table, Variable variable) 
 
 Allocation *table_allocate_register(InstructionTable *table, Type type) {
   Allocation *alloc = table_allocate(table, type);
-  alloc->source = ForceRegister;
+  alloc->source.prop = ForceRegister;
   return alloc;
 }
 
 Allocation *table_allocate_stack(InstructionTable *table, Type type) {
   Allocation *alloc = table_allocate(table, type);
-  alloc->source = ForceStack;
+  alloc->source.prop = ForceStack;
   return alloc;
 }
 
@@ -200,14 +211,26 @@ Instruction *table_next(InstructionTable *table) {
 
 void update_reference(const Instruction *instruction, const Reference reference) {
   if (isAllocated(reference.access)) {
+    printf("instr %i reads ref %i\n", instruction->id, reference.allocation->index);
     reference.allocation->lastInstr = instruction->id;
+  }
+}
+
+
+void update_reference_out(const Instruction *instruction, const Reference reference) {
+  if (isAllocated(reference.access)) {
+    printf("instr %i writes ref %i\n", instruction->id, reference.allocation->index);
   }
 }
 
 Reference instruction_mov(InstructionTable *table, const Reference from, Reference to, char *comment) {
   assert(isAllocated(to.access));
+
   if (to.allocation->name != NULL) {
-    to.allocation = table_allocate_variable(table, (Variable){.name = to.allocation->name, .type = to.allocation->type});
+    int oldIndex = to.allocation->index;
+    to.allocation =
+        table_allocate_variable(table, (Variable){.name = to.allocation->name, .type = to.allocation->type});
+    printf("variable ssa %s (%i, kills %i)\n", to.allocation->name, to.allocation->index, oldIndex);
   }
 
   Instruction *instruction = table_next(table);
@@ -217,6 +240,7 @@ Reference instruction_mov(InstructionTable *table, const Reference from, Referen
   instruction->comment = comment;
 
   update_reference(instruction, from);
+  update_reference_out(instruction, to);
   return to;
 }
 
@@ -230,10 +254,12 @@ Reference instruction_lea(InstructionTable *table, const Reference from, const R
   instruction->comment = comment;
 
   update_reference(instruction, from);
+  update_reference_out(instruction, to);
   return to;
 }
 
-Reference instruction_basic_op(InstructionTable *table, const InstructionType type, const Reference a, const Reference b, char *comment) {
+Reference instruction_basic_op(InstructionTable *table, const InstructionType type, const Reference a,
+                               const Reference b, char *comment) {
   const Reference output = instruction_mov(table, a, reference_direct(table_allocate_infer_types(table, a, b)), NULL);
 
   Instruction *instruction = table_next(table);
@@ -243,10 +269,12 @@ Reference instruction_basic_op(InstructionTable *table, const InstructionType ty
   instruction->comment = comment;
 
   update_reference(instruction, b);
+  update_reference_out(instruction, output);
   return output;
 }
 
-void instruction_no_output(InstructionTable *table, const InstructionType type, const Reference a, const Reference b, char *comment) {
+void instruction_no_output(InstructionTable *table, const InstructionType type, const Reference a, const Reference b,
+                           char *comment) {
   Instruction *instruction = table_next(table);
   instruction->type = type;
   instruction->inputs[0] = a;
@@ -275,6 +303,8 @@ Reference instruction_sp_reg_read(InstructionTable *table, const InstructionType
   instruction->output = reference_direct(allocation);
   instruction->comment = comment;
 
+  update_reference_out(instruction, instruction->output);
+
   return instruction->output;
 }
 
@@ -299,14 +329,14 @@ Reference ast_basic_op(const InstructionType type, const char *contents, Instruc
                               solve_ast_node(contents, table, globals, functions, literals, node->right), comment);
 }
 
-Reference instr_test_self(InstructionTable *table, const InstructionType type, const Reference ref, char* comment) {
+Reference instr_test_self(InstructionTable *table, const InstructionType type, const Reference ref, char *comment) {
   instruction_no_output(table, TEST, ref, ref, NULL);
 
   return instruction_sp_reg_read(table, type, comment);
 }
 
 Reference instr_cmp_chk(InstructionTable *table, const InstructionType type, const Reference left,
-                         const Reference right, char *comment) {
+                        const Reference right, char *comment) {
   instruction_no_output(table, CMP, left, right, NULL);
 
   return instruction_sp_reg_read(table, type, comment);
@@ -327,14 +357,14 @@ int table_allocate_label(InstructionTable *table) {
   return *table->sections;
 }
 
-void instruction_jump(InstructionTable * table, int label) {
+void instruction_jump(InstructionTable *table, int label) {
   Instruction *instruction = table_next(table);
   instruction->type = JMP;
   instruction->label = label;
   instruction->instructions.parent = NULL;
 }
 
-int instruction_label(InstructionTable * table, int label) {
+int instruction_label(InstructionTable *table, int label) {
   Instruction *instruction = table_next(table);
   instruction->type = LABEL;
   instruction->label = label;
@@ -342,13 +372,16 @@ int instruction_label(InstructionTable * table, int label) {
   return instruction->id;
 }
 
-Instruction *instruction_jump_code(InstructionTable *table, const char *contents, VarList *globals, FunctionList *functions,
-                           StrList *literals, InstructionType type, int label, AstNodeList *actions) {
+Instruction *instruction_jump_code(InstructionTable *table, const char *contents, VarList *globals,
+                                   FunctionList *functions, StrList *literals, InstructionType type, int label,
+                                   AstNodeList *actions) {
   Instruction *instruction = table_next(table);
   instruction->type = type;
   instruction->label = table_allocate_label(table);
 
   instructiontable_child(&instruction->instructions, table);
+
+  printf("process label .LBL.%s.%i:\n", table->name, instruction->label);
 
   instruction_label(&instruction->instructions, instruction->label);
 
@@ -357,6 +390,7 @@ Instruction *instruction_jump_code(InstructionTable *table, const char *contents
   }
 
   instruction_jump(&instruction->instructions, label);
+  printf("end process label .LBL.%s.%i\n", table->name, instruction->label);
   return instruction;
 }
 
@@ -379,7 +413,8 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   }
   case op_unary_negate: {
     Reference inner = solve_ast_node(contents, table, globals, functions, literals, node->inner);
-    Reference reference = instruction_mov(table, inner, reference_direct(table_allocate_infer_type(table, inner)), NULL);
+    Reference reference =
+        instruction_mov(table, inner, reference_direct(table_allocate_infer_type(table, inner)), NULL);
     instruction_unary(table, NEG, reference, "negate");
     return reference;
   }
@@ -410,7 +445,9 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
       inner.access = Dereference;
       return inner;
     case Dereference: {
-      return reference_deref(instruction_mov(table, inner, reference_direct(table_allocate(table, *inner.allocation->type.inner)), NULL).allocation);
+      return reference_deref(
+          instruction_mov(table, inner, reference_direct(table_allocate(table, *inner.allocation->type.inner)), NULL)
+              .allocation);
     }
       // case ConstantS:
       //   break;
@@ -419,7 +456,8 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     }
   } break;
   case op_unary_not: {
-    return instr_test_self(table, SETE, solve_ast_node(contents, table, globals, functions, literals, node->inner), "not");
+    return instr_test_self(table, SETE, solve_ast_node(contents, table, globals, functions, literals, node->inner),
+                           "not");
   }
   case op_unary_bitwise_not: {
     Reference inner = solve_ast_node(contents, table, globals, functions, literals, node->inner);
@@ -453,7 +491,8 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     return ast_basic_op(AND, contents, table, globals, functions, literals, node, "bitwise and");
   }
   case op_assignment: {
-    return instruction_mov(table, solve_ast_node(contents, table, globals, functions, literals, node->right), solve_ast_node(contents, table, globals, functions, literals, node->left), "assignment");
+    return instruction_mov(table, solve_ast_node(contents, table, globals, functions, literals, node->right),
+                           solve_ast_node(contents, table, globals, functions, literals, node->left), "assignment");
   }
   case op_and: {
     const Reference left = solve_ast_node(contents, table, globals, functions, literals, node->left);
@@ -541,8 +580,8 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   case op_value_let:
     return reference_direct(table_allocate_variable(table, node->variable));
   case cf_if: {
-    instruction_no_output(table, CMP, (Reference) { .access = ConstantI, .value = strdup("0")},
-      solve_ast_node(contents, table, globals, functions, literals, node->condition), NULL);
+    instruction_no_output(table, CMP, (Reference){.access = ConstantI, .value = strdup("0")},
+                          solve_ast_node(contents, table, globals, functions, literals, node->condition), NULL);
     int label = table_allocate_label(table);
     Instruction *i = instruction_jump_code(table, contents, globals, functions, literals, JNE, label, node->actions);
     Instruction *j = NULL;
@@ -553,7 +592,8 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     }
     int idx = instruction_label(table, label);
     i->escape = idx;
-    if (j != NULL) j->escape = idx;
+    if (j != NULL)
+      j->escape = idx;
     return reference_direct(NULL);
   }
   case cf_while:
