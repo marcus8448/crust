@@ -71,5 +71,7 @@ int8_t registerPriority[14] = {rbx, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r
 
 uint8_t calleeSavedRegisters[7] = {rbp, rbx, r12, r13, r14, r15, rsp};
 uint8_t callerSavedRegisters[9] = {rax, rcx, rdx, rsi, rdi, r8, r9, r10, r11};
+bool calleeSavedRegistersI[16] = {false, true,  false, false, false, false, true, true,
+                                  false, false, false, false, true,  true,  true, true};
 
 // /%rbp, %rbx and %r12 through %r15 are callee-save registers. All other registers

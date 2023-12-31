@@ -37,7 +37,7 @@ typedef enum {
   // ,
   op_comma,
 
-  // <nil> - <expression>
+  // <nil> - <expression>k
   op_unary_negate,
   // <nil> + <expression> (no effect)
   op_unary_plus,

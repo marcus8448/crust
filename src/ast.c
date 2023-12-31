@@ -1,4 +1,6 @@
 #include "ast.h"
+
+#include <stdio.h>
 #include <string.h>
 
 LIST_IMPL(Var, var, Variable)
@@ -257,19 +259,18 @@ Result parse_statement(const char *contents, const Token **token, VarList *globa
     }
     if (operators.len > 0 &&
         ast_precedence(nxt->type) >= ast_precedence(((AstNode *)operators.array[operators.len - 1])->type)) {
-      int valI = values.len - 1;
-      AstNode *prev = operators.array[operators.len - 1];
-      prev->val_type = ((AstNode *)values.array[valI])->val_type;
-      prev->right = values.array[valI--];
-      prev->left = values.array[valI--];
-      for (int i = operators.len - 2; i >= 0; i--) {
-        AstNode *op = operators.array[0];
+      AstNode *prev = operators.array[--operators.len];
+      prev->val_type = ((AstNode *)values.array[--values.len])->val_type;
+      prev->right = values.array[values.len];
+      prev->left = values.array[--values.len];
+      for (int i = operators.len - 1;
+           i >= 0 && ast_precedence(nxt->type) >= ast_precedence(((AstNode *)operators.array[i])->type);
+           i--, operators.len--) {
+        AstNode *op = operators.array[i];
         op->right = prev;
-        op->left = values.array[valI--];
+        op->left = values.array[--values.len];
       }
-      values.array[0] = prev;
-      values.len = 1;
-      operators.len = 0;
+      values.array[values.len++] = prev;
     }
     ptrlist_add(&operators, nxt);
     *token = (*token)->next;
