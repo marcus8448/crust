@@ -205,11 +205,12 @@ void registers_free_register(Registers *registers, Allocation *allocation) {
     break;
   case L_Stack:
     break;
-  case L_Register:
+  case L_Register: {
+    printf("Deallocated %s (%i-%s)\n", registers_get_mnemonic(registers, reference_direct(allocation)), allocation->index, allocation->name == NULL ? "null" : allocation->name);
     registers->registers[storage->reg].inUse = false;
     storage->location = L_None;
-    printf("Deallocated %i (%s)\n", allocation->index, allocation->name == NULL ? "null" : allocation->name);
     break;
+  }
   }
 }
 
@@ -405,7 +406,8 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       if (from.access == to.access && from.allocation == to.allocation) {
         break;
       }
-      if (isAllocated(from.access) && from.allocation->lastInstr == instruction->id) {
+      if (isAllocated(from.access) && from.access == Direct && from.allocation->lastInstr == instruction->id &&
+          to.allocation->index >= registers->parentCutoff) {
         registers_override(registers, to.allocation, from.allocation);
         printf("Inlined MOV from %i (%s) to %i (%s)\n", from.allocation->index,
                from.allocation->name != NULL ? from.allocation->name : "null", to.allocation->index,
@@ -479,8 +481,46 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       write_mov_into_register(registers, Quad, instruction->inputs[0], rax, output);
       fputs("\tret\n", output);
       fputs("\tret\n", stdout);
+
+      puts("Leaked allocations:");
+      for (int j = 0; j < table->allocations.len; ++j) {
+        registers_free_register(registers, table->allocations.array[j]);
+      }
+      puts("end leaked allocations");
       break;
     case LABEL:
+      for (int j = 0; j < table->instructions.len; ++j) {
+        Instruction *instruction = table->instructions.array + j;
+        switch (instruction->type) {
+        case JMP:
+        case JE:
+        case JNE:
+        case JG:
+        case JL:
+        case JGE:
+        case JLE:
+          if (instruction->instructions.parent != NULL && !instruction->processed) {
+            instruction->processed = true;
+            printf("Processing label .%s.%i:\n", table->name, instruction->label);
+            Registers subregisters;
+            registers_init_child(&subregisters, &instruction->instructions, registers);
+            generate_statement(&subregisters, contents, &instruction->instructions, globals, functions, literals,
+                               output);
+          }
+          break;
+        default:
+          break;
+        }
+        fflush(stdout);
+        fflush(output);
+      }
+
+      for (int j = 0; j < table->allocations.len; ++j) {
+        if (((Allocation *)table->allocations.array[i])->lastInstr == instruction->id) {
+          registers_free_register(registers, table->allocations.array[i]);
+        }
+      }
+
       fprintf(output, ".LBL.%s.%i:\n", table->name, instruction->label);
       fprintf(stdout, ".LBL.%s.%i:\n", table->name, instruction->label);
       break;
@@ -508,6 +548,7 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
     }
     fflush(output);
   }
+
   for (int i = 0; i < table->instructions.len; ++i) {
     Instruction *instruction = table->instructions.array + i;
     switch (instruction->type) {
@@ -517,14 +558,16 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
     case JG:
     case JL:
     case JGE:
-    case JLE:
-      if (instruction->instructions.parent != NULL) {
+    case JLE: {
+      if (instruction->instructions.parent != NULL && !instruction->processed) {
+        instruction->processed = true;
         printf("Processing label .%s.%i:\n", table->name, instruction->label);
         Registers subregisters;
         registers_init_child(&subregisters, &instruction->instructions, registers);
         generate_statement(&subregisters, contents, &instruction->instructions, globals, functions, literals, output);
       }
       break;
+    }
     default:
       break;
     }

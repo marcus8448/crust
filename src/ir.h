@@ -4,6 +4,8 @@
 #include "struct/list.h"
 #include "types.h"
 
+extern int nextInstrId;
+
 struct Allocation;
 
 typedef enum {
@@ -100,10 +102,10 @@ typedef struct InstructionTable {
   const struct InstructionTable *parent;
   InstructionList instructions;
   PtrList allocations;
-  int nextIId;
   int *sections;
   int parentCutoff;
   char *name;
+  int escape;
 } InstructionTable;
 
 typedef struct Instruction {
@@ -120,13 +122,14 @@ typedef struct Instruction {
       union {
         InstructionTable instructions;
         int escape;
+        bool processed;
       };
     };
   };
 } Instruction;
 
 void instructiontable_init(InstructionTable *table, char *name);
-void instructiontable_child(InstructionTable *table, const InstructionTable *parent);
+void instructiontable_child(InstructionTable *table, const InstructionTable *parent, int escape);
 
 void table_allocate_arguments(InstructionTable *table, const Function *function);
 void instructiontable_free(InstructionTable *table);

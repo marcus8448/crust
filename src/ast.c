@@ -351,7 +351,6 @@ Result parse_value(const char *contents, const Token **token, VarList *globals, 
       node->token = *token;
       *token = (*token)->next;
       forward_err(parse_statement(contents, token, globals, functions, token_closing_sqbr, node->right));
-      *token = (*token)->next;
       break;
     default:
       node->type = op_value_variable;

@@ -4,6 +4,8 @@
 #include "util.h"
 #include <string.h>
 
+int nextInstrId = 0;
+
 LIST_IMPL(Instruction, inst, Instruction)
 
 bool isAllocated(const AccessType type) {
@@ -15,20 +17,19 @@ void instructiontable_init(InstructionTable *table, char *name) {
   ptrlist_init(&table->allocations, 4);
   table->parent = NULL;
   table->name = name;
-  table->nextIId = 0;
   table->parentCutoff = 0;
   table->sections = malloc(sizeof(int));
   *table->sections = 0;
 }
 
-void instructiontable_child(InstructionTable *table, const InstructionTable *parent) {
+void instructiontable_child(InstructionTable *table, const InstructionTable *parent, int escape) {
   instlist_init(&table->instructions, 8);
   ptrlist_init(&table->allocations, parent->allocations.capacity);
   table->parent = parent;
   table->name = parent->name;
-  table->nextIId = 0;
   table->sections = parent->sections;
   table->parentCutoff = parent->allocations.len;
+  table->escape = escape;
   for (int i = 0; i < parent->allocations.len; ++i) {
     ptrlist_add(&table->allocations, parent->allocations.array[i]);
   }
@@ -205,15 +206,19 @@ Allocation *table_allocate_stack(InstructionTable *table, Type type) {
 Instruction *table_next(InstructionTable *table) {
   Instruction *instruction = instlist_grow(&table->instructions);
   instruction_init(instruction);
-  instruction->id = table->nextIId++;
+  instruction->id = nextInstrId++;
   return instruction;
 }
 
-void update_reference(const Instruction *instruction, const Reference reference) {
+void update_reference(const InstructionTable *table, const Instruction *instruction, const Reference reference) {
   if (isAllocated(reference.access)) {
     printf("instr %i reads ref %i (%s)\n", instruction->id, reference.allocation->index,
            reference.allocation->name == NULL ? "null" : reference.allocation->name);
-    reference.allocation->lastInstr = instruction->id;
+    if (table->parentCutoff <= reference.allocation->index) {
+      reference.allocation->lastInstr = instruction->id;
+    } else {
+      reference.allocation->lastInstr = table->escape;
+    }
   }
 }
 
@@ -240,7 +245,7 @@ Reference instruction_mov(InstructionTable *table, const Reference from, Referen
   instruction->output = to;
   instruction->comment = comment;
 
-  update_reference(instruction, from);
+  update_reference(table, instruction, from);
   update_reference_out(instruction, to);
   return to;
 }
@@ -254,7 +259,7 @@ Reference instruction_lea(InstructionTable *table, const Reference from, const R
   instruction->output = to;
   instruction->comment = comment;
 
-  update_reference(instruction, from);
+  update_reference(table, instruction, from);
   update_reference_out(instruction, to);
   return to;
 }
@@ -269,7 +274,7 @@ Reference instruction_basic_op(InstructionTable *table, const InstructionType ty
   instruction->output = output;
   instruction->comment = comment;
 
-  update_reference(instruction, b);
+  update_reference(table, instruction, b);
   update_reference_out(instruction, output);
   return output;
 }
@@ -282,8 +287,8 @@ void instruction_no_output(InstructionTable *table, const InstructionType type, 
   instruction->inputs[1] = b;
   instruction->comment = comment;
 
-  update_reference(instruction, a);
-  update_reference(instruction, b);
+  update_reference(table, instruction, a);
+  update_reference(table, instruction, b);
 }
 
 Reference instruction_ret(InstructionTable *table, const Reference value) {
@@ -292,7 +297,7 @@ Reference instruction_ret(InstructionTable *table, const Reference value) {
   instruction->inputs[0] = value;
   instruction->comment = "ret";
 
-  update_reference(instruction, value);
+  update_reference(table, instruction, value);
   return value;
 }
 
@@ -350,7 +355,7 @@ void instruction_unary(InstructionTable *table, InstructionType type, Reference 
   instruction->output = reference;
   instruction->comment = comment;
 
-  update_reference(instruction, reference);
+  update_reference(table, instruction, reference);
 }
 
 int table_allocate_label(InstructionTable *table) {
@@ -363,6 +368,7 @@ void instruction_jump(InstructionTable *table, int label) {
   instruction->type = JMP;
   instruction->label = label;
   instruction->instructions.parent = NULL;
+  instruction->processed = false;
 }
 
 int instruction_label(InstructionTable *table, int label) {
@@ -370,6 +376,7 @@ int instruction_label(InstructionTable *table, int label) {
   instruction->type = LABEL;
   instruction->label = label;
   instruction->instructions.parent = NULL;
+  instruction->processed = false;
   return instruction->id;
 }
 
@@ -380,7 +387,7 @@ Instruction *instruction_jump_code(InstructionTable *table, const char *contents
   instruction->type = type;
   instruction->label = table_allocate_label(table);
 
-  instructiontable_child(&instruction->instructions, table);
+  instructiontable_child(&instruction->instructions, table, -1);
 
   printf("process label .LBL.%s.%i:\n", table->name, instruction->label);
 
@@ -592,9 +599,9 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
       instruction_jump(table, label);
     }
     int idx = instruction_label(table, label);
-    i->escape = idx;
+    i->instructions.escape = i->escape = idx;
     if (j != NULL)
-      j->escape = idx;
+      j->instructions.escape = j->escape = idx;
     return reference_direct(NULL);
   }
   case cf_while:

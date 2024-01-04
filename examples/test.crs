@@ -5,13 +5,11 @@ fn main() -> i64 {
     let y: i64 = 45;
     let z: i64 = 23;
 
-    let ref: [i64] = &z;
+    let ref: [i64] = (&z);
 
-    x = y - *ref + 1;
+    x = y - ((ref[0])) + 1;
 
-    //if (x) {
-   x = 1;
-    //}
+
 
     return x + 2 * 6;
 }
