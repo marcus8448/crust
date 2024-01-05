@@ -37,6 +37,20 @@ void write_binary_op(const Registers *registers, const char *op, const Width wid
           registers_get_mnemonic(registers, b));
 }
 
+void write_binary_transform_op(const Registers *registers, const char *op, const Width width, const Width width2, const Reference a,
+                     const Reference b, FILE *output) {
+  if (isAllocated(a.access) && registers_get_storage(registers, a.allocation)->location == L_None) {
+    printf("variable at index %i (%s) not allocated!\n", a.allocation->index, a.allocation->name);
+  }
+  if (isAllocated(b.access) && registers_get_storage(registers, b.allocation)->location == L_None) {
+    printf("variable at index %i (%s) not allocated!\n", b.allocation->index, b.allocation->name);
+  }
+  fprintf(output, "\t%s%c%c %s, %s\n", op, mnemonic_suffix(width), mnemonic_suffix(width2), registers_get_mnemonic(registers, a),
+          registers_get_mnemonic(registers, b));
+  fprintf(stdout, "\t%s%c%c %s, %s\n", op, mnemonic_suffix(width), mnemonic_suffix(width2), registers_get_mnemonic(registers, a),
+          registers_get_mnemonic(registers, b));
+}
+
 void write_cmp_op(const Registers *registers, const char *op, const Reference a, const Reference b, FILE *output) {
   fprintf(output, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(ref_infer_type(a, b))),
           registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
@@ -206,7 +220,8 @@ void registers_free_register(Registers *registers, Allocation *allocation) {
   case L_Stack:
     break;
   case L_Register: {
-    printf("Deallocated %s (%i-%s)\n", registers_get_mnemonic(registers, reference_direct(allocation)), allocation->index, allocation->name == NULL ? "null" : allocation->name);
+    printf("Deallocated %s (%i-%s)\n", registers_get_mnemonic(registers, reference_direct(allocation)),
+           allocation->index, allocation->name == NULL ? "null" : allocation->name);
     registers->registers[storage->reg].inUse = false;
     storage->location = L_None;
     break;
@@ -407,19 +422,23 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
         break;
       }
       if (isAllocated(from.access) && from.access == Direct && from.allocation->lastInstr == instruction->id &&
-          to.allocation->index >= registers->parentCutoff) {
+          to.allocation->index >= registers->parentCutoff && to.allocation->type.kind == from.allocation->type.kind) {
         registers_override(registers, to.allocation, from.allocation);
         printf("Inlined MOV from %i (%s) to %i (%s)\n", from.allocation->index,
                from.allocation->name != NULL ? from.allocation->name : "null", to.allocation->index,
                to.allocation->name != NULL ? to.allocation->name : "null");
         break;
-      }
+          }
       if (registers_get_storage(registers, to.allocation)->location == L_None) {
         registers_claim(registers, to.allocation);
       }
       fflush(output);
       fflush(stdout);
-      write_binary_op(registers, "mov", type_width(instruction->output.allocation->type), from, to, output);
+      if (to.allocation->type.kind == from.allocation->type.kind) {
+        write_binary_op(registers, "mov", type_width(instruction->output.allocation->type), from, to, output);
+      } else {
+        write_binary_transform_op(registers, "movs", type_width(from.allocation->type), type_width(instruction->output.allocation->type), from, to, output);
+      }
       cullref(registers, instruction, from);
       break;
     }
@@ -478,7 +497,7 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       write_cmp_op(registers, "test", instruction->inputs[0], instruction->inputs[1], output);
       break;
     case RET:
-      write_mov_into_register(registers, Quad, instruction->inputs[0], rax, output);
+      write_mov_into_register(registers, isAllocated(instruction->inputs[0].access) ? type_width(instruction->inputs[0].allocation->type) : Quad, instruction->inputs[0], rax, output);
       fputs("\tret\n", output);
       fputs("\tret\n", stdout);
 
@@ -516,8 +535,8 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       }
 
       for (int j = 0; j < table->allocations.len; ++j) {
-        if (((Allocation *)table->allocations.array[i])->lastInstr == instruction->id) {
-          registers_free_register(registers, table->allocations.array[i]);
+        if (((Allocation *)table->allocations.array[j])->lastInstr == instruction->id) {
+          registers_free_register(registers, table->allocations.array[j]);
         }
       }
 

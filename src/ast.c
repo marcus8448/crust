@@ -364,9 +364,6 @@ Result parse_value(const char *contents, const Token **token, VarList *globals, 
   case token_string:
     node->type = op_value_string;
     break;
-  case token_keyword_as:
-    node->type = op_cast;
-    break;
   case token_cf_if:
   case token_cf_else:
   case token_cf_return:
@@ -382,7 +379,6 @@ Result parse_value(const char *contents, const Token **token, VarList *globals, 
     AstNode *node1 = malloc(sizeof(AstNode));
     *node1 = *node;
     node->token = *token;
-    *token = (*token)->next;
     Type type;
     parse_type(contents, token, &type);
 

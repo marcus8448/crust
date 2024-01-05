@@ -232,6 +232,7 @@ void update_reference_out(const Instruction *instruction, const Reference refere
 Reference instruction_mov(InstructionTable *table, const Reference from, Reference to, char *comment) {
   assert(isAllocated(to.access));
 
+  // SSA
   if (to.allocation->name != NULL && to.allocation->index >= table->parentCutoff) {
     printf("ref %i is dead\n", to.allocation->index);
     to.allocation =
@@ -341,8 +342,20 @@ Reference instr_test_self(InstructionTable *table, const InstructionType type, c
   return instruction_sp_reg_read(table, type, comment);
 }
 
-Reference instr_cmp_chk(InstructionTable *table, const InstructionType type, const Reference left,
-                        const Reference right, char *comment) {
+Reference instr_cmp_chk(InstructionTable *table, const InstructionType type, Reference left,
+                        Reference right, char *comment) {
+
+  if (!isAllocated(right.access)) {
+    if (isAllocated(left.access)) {
+      const Reference temp = left;
+      left = right;
+      right = temp;
+    } else {
+      Allocation *allocation = table_allocate(table, (Type){.kind = i64, .inner = NULL});
+      instruction_mov(table, right, reference_direct(allocation), NULL);
+      right = reference_direct(allocation);
+    }
+  }
   instruction_no_output(table, CMP, left, right, NULL);
 
   return instruction_sp_reg_read(table, type, comment);
@@ -583,8 +596,17 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     reference.value = copy;
     return reference;
   }
-  case op_cast:
-    break;
+  case op_cast: {
+    Reference inner = solve_ast_node(contents, table, globals, functions, literals, node->inner);
+    if (isAllocated(inner.access)) {
+      if (inner.allocation->type.kind != node->val_type.kind) {
+        Reference reference = reference_direct(table_allocate(table, node->val_type));
+        instruction_mov(table, inner, reference, "cast");
+        return reference;
+      }
+    }
+    return inner;
+  }
   case op_value_let:
     return reference_direct(table_allocate_variable(table, node->variable));
   case cf_if: {
