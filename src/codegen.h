@@ -37,7 +37,7 @@ void registers_init_child(Registers *registers, InstructionTable *table, const R
 void registers_free(Registers *registers);
 
 void registers_claim(Registers *registers, Allocation *allocation);
-void registers_make_stack(Registers *registers, Allocation *allocation, FILE *output);
+void registers_move_to_stack(Registers *registers, Allocation *allocation, FILE *output);
 void registers_free_register(Registers *registers, Allocation *allocation);
 
 Storage *registers_get_storage(const Registers *registers, Allocation *allocation);

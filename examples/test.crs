@@ -1,11 +1,8 @@
 let GLOBAL: i32 = 5;
 
+extern fn putchar(c: i8) -> i32;
+
 fn main(argc: i32) -> i64 {
-    let z: i64 = argc;
-    if (argc == 9) {
-        return 7;
-    } else {if (argc == 3) {
-        return 8;
-    }}
-    return z;
+    putchar(95);
+    return 0;
 }

@@ -302,6 +302,21 @@ Reference instruction_ret(InstructionTable *table, const Reference value) {
   return value;
 }
 
+Reference instruction_call(InstructionTable *table, Function* function, Reference* arguments, const Reference output) {
+  Instruction *instruction = table_next(table);
+  instruction->type = CALL;
+  instruction->arguments = arguments;
+  instruction->function = function;
+  instruction->retVal = output;
+  instruction->comment = "ret";
+
+  for (int i = 0; i < function->arguments.len; i++) {
+    update_reference(table, instruction, arguments[i]);
+  }
+
+  return output;
+}
+
 Reference instruction_sp_reg_read(InstructionTable *table, const InstructionType type, char *comment) {
   const Type typ = {.kind = u8, .inner = NULL};
   Instruction *instruction = table_next(table);
@@ -342,8 +357,8 @@ Reference instr_test_self(InstructionTable *table, const InstructionType type, c
   return instruction_sp_reg_read(table, type, comment);
 }
 
-Reference instr_cmp_chk(InstructionTable *table, const InstructionType type, Reference left,
-                        Reference right, char *comment) {
+Reference instr_cmp_chk(InstructionTable *table, const InstructionType type, Reference left, Reference right,
+                        char *comment) {
 
   if (!isAllocated(right.access)) {
     if (isAllocated(left.access)) {
@@ -420,8 +435,6 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   switch (node->type) {
   case op_nop:
     exit(112);
-  case op_function:
-    break;
   case op_array_index: {
     Reference index = ast_basic_op(ADD, contents, table, globals, functions, literals, node, "array index");
     index.access = Dereference;
@@ -609,6 +622,12 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   }
   case op_value_let:
     return reference_direct(table_allocate_variable(table, node->variable));
+  case op_function:
+    Reference *references = malloc(sizeof(Reference) * node->arguments->len);
+    for (int i = 0; i < node->arguments->len; ++i) {
+      references[i] = solve_ast_node(contents, table, globals, functions, literals, &node->arguments->array[i]);
+    }
+    return instruction_call(table, node->function, references, reference_direct(table_allocate(table, node->function->retVal)));
   case cf_if: {
     instruction_no_output(table, CMP, (Reference){.access = ConstantI, .value = strdup("0")},
                           solve_ast_node(contents, table, globals, functions, literals, node->condition), NULL);

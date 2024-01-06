@@ -37,18 +37,18 @@ void write_binary_op(const Registers *registers, const char *op, const Width wid
           registers_get_mnemonic(registers, b));
 }
 
-void write_binary_transform_op(const Registers *registers, const char *op, const Width width, const Width width2, const Reference a,
-                     const Reference b, FILE *output) {
+void write_binary_transform_op(const Registers *registers, const char *op, const Width width, const Width width2,
+                               const Reference a, const Reference b, FILE *output) {
   if (isAllocated(a.access) && registers_get_storage(registers, a.allocation)->location == L_None) {
     printf("variable at index %i (%s) not allocated!\n", a.allocation->index, a.allocation->name);
   }
   if (isAllocated(b.access) && registers_get_storage(registers, b.allocation)->location == L_None) {
     printf("variable at index %i (%s) not allocated!\n", b.allocation->index, b.allocation->name);
   }
-  fprintf(output, "\t%s%c%c %s, %s\n", op, mnemonic_suffix(width), mnemonic_suffix(width2), registers_get_mnemonic(registers, a),
-          registers_get_mnemonic(registers, b));
-  fprintf(stdout, "\t%s%c%c %s, %s\n", op, mnemonic_suffix(width), mnemonic_suffix(width2), registers_get_mnemonic(registers, a),
-          registers_get_mnemonic(registers, b));
+  fprintf(output, "\t%s%c%c %s, %s\n", op, mnemonic_suffix(width), mnemonic_suffix(width2),
+          registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
+  fprintf(stdout, "\t%s%c%c %s, %s\n", op, mnemonic_suffix(width), mnemonic_suffix(width2),
+          registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
 }
 
 void write_cmp_op(const Registers *registers, const char *op, const Reference a, const Reference b, FILE *output) {
@@ -77,6 +77,13 @@ void write_mov_into_register(const Registers *registers, const Width width, cons
   fprintf(output, "\tmov%c %s, %s\n", mnemonic_suffix(width), registers_get_mnemonic(registers, ref),
           get_register_mnemonic(width, reg));
   fprintf(stdout, "\tmov%c %s, %s\n", mnemonic_suffix(width), registers_get_mnemonic(registers, ref),
+          get_register_mnemonic(width, reg));
+}
+
+void write_mov_into_register_FS(const Width width, const int16_t offset, const int8_t reg, FILE *output) {
+  fprintf(output, "\tmov%c %i(%%rbp), %s\n", mnemonic_suffix(width), offset,
+          get_register_mnemonic(width, reg));
+  fprintf(stdout, "\tmov%c %i(%%rbp), %s\n", mnemonic_suffix(width), offset,
           get_register_mnemonic(width, reg));
 }
 
@@ -184,7 +191,7 @@ void registers_claim(Registers *registers, Allocation *allocation) {
   }
 }
 
-void registers_make_stack(Registers *registers, Allocation *allocation, FILE *output) {
+void registers_move_to_stack(Registers *registers, Allocation *allocation, FILE *output) {
   Storage *unknown = registers_get_storage(registers, allocation);
   switch (unknown->location) {
   case L_None: {
@@ -250,6 +257,9 @@ void registers_claim_register(Registers *registers, Allocation *output, const in
   assert(!registers->registers[reg].inUse);
   registers->registers[reg].inUse = true;
   Storage *storage = registers_get_storage(registers, output);
+  if (storage->location == L_Register) {
+    registers->registers[storage->reg].inUse = false;
+  }
   storage->location = L_Register;
   storage->reg = reg;
 }
@@ -358,7 +368,7 @@ void binary_lea(Registers *registers, Instruction *instruction, FILE *output) {
     registers_claim(registers, instruction->output.allocation);
   }
   if (registers_get_storage(registers, instruction->inputs[0].allocation)->location != L_Stack) {
-    registers_make_stack(registers, instruction->inputs[0].allocation, output);
+    registers_move_to_stack(registers, instruction->inputs[0].allocation, output);
   }
 
   write_binary_op(registers, "lea", type_width(instruction->output.allocation->type), instruction->inputs[0],
@@ -374,6 +384,63 @@ void cmp_output(const char *op, Registers *registers, Instruction *instruction, 
     registers_claim(registers, instruction->output.allocation);
   }
   write_unary_op(registers, op, Byte, instruction->output, output);
+}
+
+void clear_register(const InstructionTable *table, Registers *registers, int8_t reg, FILE *output) {
+  for (int i = 0; i < table->allocations.len; ++i) {
+    if (registers->storage[i].location == L_Register) {
+      if (registers->storage[i].reg == reg) {
+        registers_move_to_stack(registers, table->allocations.array[i], output);
+      }
+    }
+  }
+}
+
+void registers_move_into_register(const InstructionTable *table, Registers *registers, Type type, Reference ref, int8_t reg, FILE *output) {
+  if (!registers->registers[reg].inUse) {
+    if (isAllocated(ref.access)) {
+      assert(registers_get_storage(registers, &ref)->location != L_None);
+    }
+
+    write_mov_into_register(registers, type_width(type), ref, reg, output);
+
+    if (isAllocated(ref.access)) {
+      registers_claim_register(registers, ref.allocation, reg);
+    }
+  } else if (!isAllocated(ref.access) || registers_get_storage(registers, ref.allocation)->location != L_Register || registers_get_storage(registers, ref.allocation)->reg != reg){
+    clear_register(table, registers, reg, output);
+
+    registers_move_into_register(table, registers, type, ref, reg, output);
+  }
+}
+
+int push_function_arguments(const InstructionTable *table, Registers *registers, Reference *arguments, Function *function, FILE *output) {
+  for (int i = 0; i < function->arguments.len && i < 6; ++i) {
+    registers_move_into_register(table, registers, function->arguments.array[i].type, arguments[i], argumentRegisters[i], output);
+  }
+
+  int offset = registers->offset;
+
+  for (int i = 0; i < table->allocations.len; ++i) {
+    if (registers->storage[i].location == L_Register) {
+      offset -= type_size(((Allocation *)table->allocations.array[i])->type);
+      write_mov_into_stack(registers, type_width(((Allocation *)table->allocations.array[i])->type),
+                           reference_direct(table->allocations.array[i]), offset, output);
+    }
+  }
+
+  const int base = offset;
+
+  for (int i = function->arguments.len - 1; i >= 6; --i) {
+    offset -= type_size(function->arguments.array[i].type);
+    write_mov_into_stack(registers, type_width(function->arguments.array[i].type), arguments[i], offset, output);
+  }
+
+  if (base != 0) {
+    fprintf(output, "\tsubq $%i, %%rsp\n", -base + 16);
+    fprintf(stdout, "\tsubq $%i, %%rsp\n", -base + 16);
+  }
+  return base;
 }
 
 void generate_statement(Registers *registers, const char *contents, InstructionTable *table, VarList *globals,
@@ -412,7 +479,22 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       cmp_output("setge", registers, instruction, output);
       break;
     case CALL: {
-      assert(false);
+      int base = registers->offset;
+      int offset = push_function_arguments(table, registers, instruction->arguments, instruction->function, output);
+
+      fprintf(output, "\tcall %s\n", instruction->function->name);
+      fprintf(stdout, "\tcall %s\n", instruction->function->name);
+
+      fprintf(output, "\taddq $%i, %%rsp\n", -offset + 16);
+      fprintf(stderr, "\taddq $%i, %%rsp\n", -offset + 16);
+
+      for (int j = 0; j < table->allocations.len; ++j) {
+        if (registers->storage[j].location == L_Register) {
+          base -= type_size(((Allocation *)table->allocations.array[j])->type);
+          write_mov_into_register_FS(type_width(((Allocation *)table->allocations.array[j])->type), base,
+                                     registers->storage[j].reg, output);
+        }
+      }
       break;
     }
     case MOV: {
@@ -428,7 +510,7 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
                from.allocation->name != NULL ? from.allocation->name : "null", to.allocation->index,
                to.allocation->name != NULL ? to.allocation->name : "null");
         break;
-          }
+      }
       if (registers_get_storage(registers, to.allocation)->location == L_None) {
         registers_claim(registers, to.allocation);
       }
@@ -437,7 +519,8 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       if (to.allocation->type.kind == from.allocation->type.kind) {
         write_binary_op(registers, "mov", type_width(instruction->output.allocation->type), from, to, output);
       } else {
-        write_binary_transform_op(registers, "movs", type_width(from.allocation->type), type_width(instruction->output.allocation->type), from, to, output);
+        write_binary_transform_op(registers, "movs", type_width(from.allocation->type),
+                                  type_width(instruction->output.allocation->type), from, to, output);
       }
       cullref(registers, instruction, from);
       break;
@@ -497,7 +580,10 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       write_cmp_op(registers, "test", instruction->inputs[0], instruction->inputs[1], output);
       break;
     case RET:
-      write_mov_into_register(registers, isAllocated(instruction->inputs[0].access) ? type_width(instruction->inputs[0].allocation->type) : Quad, instruction->inputs[0], rax, output);
+      write_mov_into_register(
+          registers,
+          isAllocated(instruction->inputs[0].access) ? type_width(instruction->inputs[0].allocation->type) : Quad,
+          instruction->inputs[0], rax, output);
       fputs("\tret\n", output);
       fputs("\tret\n", stdout);
 

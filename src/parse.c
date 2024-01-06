@@ -80,7 +80,27 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
     }
     case token_asterik:
     case token_identifier: {
-      forward_err(parse_statement(contents, token, globals, functions, token_semicolon, astnodelist_grow(nodes)));
+      if ((*token)->next->type == token_opening_paren) {
+        const Token *fn = *token;
+        *token = (*token)->next->next;
+        int index = functionlist_indexof_tok(functions, contents, fn);
+        if (index == -1) {
+          return failure(fn, "function not declared");
+        }
+        const Function *function = &functions->array[index];
+
+        AstNode *node = astnodelist_grow(nodes);
+        node->type = op_function;
+        node->arguments = malloc(sizeof(AstNodeList));
+        astnodelist_init(node->arguments, function->arguments.len);
+        for (int i = 0; i < function->arguments.len; ++i) {
+          parse_statement(contents, token, globals, functions, i == function->arguments.len - 1 ? token_closing_paren : token_comma, astnodelist_grow(node->arguments));
+        }
+        node->function = function;
+        *token = (*token)->next;
+      } else {
+        forward_err(parse_statement(contents, token, globals, functions, token_semicolon, astnodelist_grow(nodes)));
+      }
       break;
     }
     case token_cf_if: {
@@ -134,8 +154,7 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
       return failure(*token, "expected start of statement");
     }
   }
-  // unreachable
-  abort();
+  exit(84);
 }
 
 Result invoke_function(const char *contents, const Token **token, InstructionTable *table, VarList *vars,

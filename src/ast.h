@@ -136,6 +136,12 @@ typedef struct AstNode {
       AstNodeList *alternative;
     };
 
+    // function call
+    struct {
+      Function *function;
+      AstNodeList *arguments;
+    };
+
     struct {
       Type val_type;
       union {

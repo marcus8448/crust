@@ -76,7 +76,7 @@ typedef enum {
   JGE,
   JLE,
 
-  CALL, // todo
+  CALL,
   RET,
 
   MOV,
@@ -124,6 +124,11 @@ typedef struct Instruction {
         int escape;
         bool processed;
       };
+    };
+    struct {
+      Function *function;
+      Reference retVal;
+      Reference* arguments;
     };
   };
 } Instruction;
