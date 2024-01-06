@@ -336,9 +336,9 @@ char *registers_get_mnemonic(const Registers *registers, const Reference referen
     return str;
   }
   case ConstantS: {
-    char *str = malloc(4 + (reference.str / 10 + 1) + 1);
-    sprintf(str, "$.LC%i", reference.str);
-    str[4 + (reference.str / 10 + 1)] = '\0';
+    char *str = malloc(7 + (reference.str / 10 + 1) + 1);
+    sprintf(str, "$.L.STR%i", reference.str);
+    str[7 + (reference.str / 10 + 1)] = '\0';
     return str;
   }
   case Global: {
@@ -399,7 +399,7 @@ void clear_register(const InstructionTable *table, Registers *registers, int8_t 
 void registers_move_into_register(const InstructionTable *table, Registers *registers, Type type, Reference ref, int8_t reg, FILE *output) {
   if (!registers->registers[reg].inUse) {
     if (isAllocated(ref.access)) {
-      assert(registers_get_storage(registers, &ref)->location != L_None);
+      assert(registers_get_storage(registers, ref.allocation)->location != L_None);
     }
 
     write_mov_into_register(registers, type_width(type), ref, reg, output);
@@ -486,7 +486,7 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       fprintf(stdout, "\tcall %s\n", instruction->function->name);
 
       fprintf(output, "\taddq $%i, %%rsp\n", -offset + 16);
-      fprintf(stderr, "\taddq $%i, %%rsp\n", -offset + 16);
+      fprintf(stdout, "\taddq $%i, %%rsp\n", -offset + 16);
 
       for (int j = 0; j < table->allocations.len; ++j) {
         if (registers->storage[j].location == L_Register) {
@@ -509,6 +509,7 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
         printf("Inlined MOV from %i (%s) to %i (%s)\n", from.allocation->index,
                from.allocation->name != NULL ? from.allocation->name : "null", to.allocation->index,
                to.allocation->name != NULL ? to.allocation->name : "null");
+        if (to.allocation->name == NULL) to.allocation->name = from.allocation->name;
         break;
       }
       if (registers_get_storage(registers, to.allocation)->location == L_None) {

@@ -61,7 +61,7 @@ Result parse_function_declaration(const char *contents, const Token **token, Fun
   return success();
 }
 
-int add_str_literal(char *contents, const Token *token, StrList *strLiterals, FILE *output) {
+int add_str_literal(const char *contents, const Token *token, StrList *strLiterals, FILE *output) {
   char *buf = malloc(token->len + 1);
   memcpy(buf, contents + token->index, token->len);
   buf[token->len] = '\0';
@@ -78,6 +78,14 @@ int add_str_literal(char *contents, const Token *token, StrList *strLiterals, FI
 
 Result preprocess_globals(char *contents, const Token *token, StrList *strLiterals, VarList *variables,
                           FunctionList *functions, FILE *output) {
+  Token *base = token;
+  while (base != NULL) {
+    if (base->type == token_string) {
+      add_str_literal(contents, base, strLiterals, output);
+    }
+    base = base->next;
+  }
+
   while (token != NULL) {
     switch (token->type) {
     case token_eof:
@@ -146,9 +154,6 @@ Result preprocess_globals(char *contents, const Token *token, StrList *strLitera
         }
       }
     } break;
-    case token_string: {
-      add_str_literal(contents, token, strLiterals, output);
-    } break;
     case token_keyword_extern: {
       token = token->next;
       switch (token->type) {
@@ -188,5 +193,6 @@ Result preprocess_globals(char *contents, const Token *token, StrList *strLitera
     }
     token = token->next;
   }
+
   return success();
 }

@@ -1,8 +1,22 @@
 let GLOBAL: i32 = 5;
 
 extern fn putchar(c: i8) -> i32;
+extern fn puts(c: [i8]) -> i32;
 
 fn main(argc: i32) -> i64 {
-    putchar(95);
+    putchar(97);
+    putchar(114);
+    putchar(103);
+    putchar(117);
+    putchar(109);
+    putchar(101);
+    putchar(110);
+    putchar(116);
+    putchar(115);
+    putchar(58);
+    putchar(32);
+    putchar(argc + 48);
+    putchar(10);
+    puts("TEST");
     return 0;
 }
