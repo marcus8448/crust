@@ -102,16 +102,16 @@ enum Register8 {
 
 char mnemonic_suffix(Width size);
 char fp_mnemonic_suffix(Width size);
-const char *get_register_mnemonic(Width size, uint8_t index);
+const char *get_register_mnemonic(Width size, int8_t index);
 
 extern const char *mnemonicFP[16];
 extern const char *mnemonic64[16];
 extern const char *mnemonic32[16];
 extern const char *mnemonic16[16];
 extern const char *mnemonic8[16];
-extern uint8_t argumentRegisters[6];
+extern int8_t argumentRegisters[6];
 extern int8_t registerPriority[14];
-extern uint8_t calleeSavedRegisters[7];
-extern uint8_t callerSavedRegisters[9];
+extern int8_t calleeSavedRegisters[7];
+extern int8_t callerSavedRegisters[9];
 extern bool calleeSavedRegistersI[16];
 #endif // REGISTER_H

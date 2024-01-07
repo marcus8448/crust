@@ -82,7 +82,7 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
     case token_identifier: {
       if ((*token)->next->type == token_opening_paren) {
         const Token *fn = *token;
-        *token = (*token)->next->next;
+        *token = (*token)->next;
         int index = functionlist_indexof_tok(functions, contents, fn);
         if (index == -1) {
           return failure(fn, "function not declared");
@@ -94,7 +94,8 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
         node->arguments = malloc(sizeof(AstNodeList));
         astnodelist_init(node->arguments, function->arguments.len);
         for (int i = 0; i < function->arguments.len; ++i) {
-          parse_statement(contents, token, globals, functions, i == function->arguments.len - 1 ? token_closing_paren : token_comma, astnodelist_grow(node->arguments));
+          *token = (*token)->next;
+          forward_err(parse_statement(contents, token, globals, functions, i == function->arguments.len - 1 ? token_closing_paren : token_comma, astnodelist_grow(node->arguments)));
         }
         node->function = function;
         *token = (*token)->next;

@@ -89,6 +89,7 @@ Allocation *table_allocate(InstructionTable *table, Type type) {
   alloc->lvalue = false;
   alloc->index = table->allocations.len - 1;
   alloc->source.prop = None;
+  alloc->lastInstr = -1;
   return *allocation;
 }
 
@@ -139,6 +140,7 @@ Allocation *table_allocate_infer_types(InstructionTable *table, Reference a, Ref
 
   alloc->source.prop = None;
   alloc->index = table->allocations.len - 1;
+  alloc->lastInstr = -1;
   return *allocation;
 }
 
@@ -308,7 +310,7 @@ Reference instruction_call(InstructionTable *table, Function* function, Referenc
   instruction->arguments = arguments;
   instruction->function = function;
   instruction->retVal = output;
-  instruction->comment = "ret";
+  instruction->comment = "call";
 
   for (int i = 0; i < function->arguments.len; i++) {
     update_reference(table, instruction, arguments[i]);

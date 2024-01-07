@@ -70,8 +70,7 @@ int add_str_literal(const char *contents, const Token *token, StrList *strLitera
     free(buf);
     return index;
   }
-  fprintf(output, ".L.STR%i:\n\t.asciz\t%s\n\t.size\t.L.STR%i, %i\n", strLiterals->len, buf, strLiterals->len,
-          token->len - 1);
+  fprintf(output, ".L.STR%i:\n\t.string\t%s\n", strLiterals->len, buf);
   strlist_add(strLiterals, buf);
   return strLiterals->len - 1;
 }

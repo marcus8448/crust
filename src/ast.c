@@ -339,7 +339,14 @@ Result parse_value(const char *contents, const Token **token, VarList *globals, 
         return failure(*token, "unknown funciton");
 
       *token = (*token)->next;
-      forward_err(parse_args(contents, token, &functions->array[indexof_tok], globals, functions, node->inner));
+      Function *function = &functions->array[indexof_tok];
+      node->arguments = malloc(sizeof(AstNodeList));
+      astnodelist_init(node->arguments, function->arguments.len);
+      for (int i = 0; i < function->arguments.len; ++i) {
+        *token = (*token)->next;
+        forward_err(parse_statement(contents, token, globals, functions, i == function->arguments.len - 1 ? token_closing_paren : token_comma, astnodelist_grow(node->arguments)));
+      }
+      node->function = function;
       break;
     case token_opening_sqbr:
       node->left = malloc(sizeof(AstNode));
@@ -392,13 +399,13 @@ Result parse_value(const char *contents, const Token **token, VarList *globals, 
 Result parse_args(const char *contents, const Token **token, Function *function, VarList *vars, FunctionList *functions,
                   AstNode *inner) {
   if (function->arguments.len > 0) {
-    for (int i = 1; i < function->arguments.len; ++i) {
-      parse_statement(contents, token, vars, functions,
-                      i == function->arguments.len - 1 ? token_closing_paren : token_comma, inner);
-      if (i == function->arguments.len - 1) {
-      }
+    for (int i = 0; i < function->arguments.len; ++i) {
+    *token = (*token)->next;
+      forward_err(parse_statement(contents, token, vars, functions,
+                      i == function->arguments.len - 1 ? token_closing_paren : token_comma, inner));
     }
   }
+  return success();
 }
 
 LIST_IMPL(AstNode, astnode, AstNode)

@@ -29,10 +29,10 @@ typedef struct Registers {
   RegisterState registers[16];
   int offset;
   Storage *storage;
-  int parentCutoff;
+  const struct Registers *parent;
 } Registers;
 
-void registers_init(Registers *registers, InstructionTable *table);
+void registers_init(Registers *registers, const InstructionTable *table);
 void registers_init_child(Registers *registers, InstructionTable *table, const Registers *parent);
 void registers_free(Registers *registers);
 
