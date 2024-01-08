@@ -119,11 +119,8 @@ typedef struct Instruction {
     };
     struct {
       int label;
-      union {
-        InstructionTable instructions;
-        int escape;
-        bool processed;
-      };
+      InstructionTable instructions;
+      bool processed;
     };
     struct {
       Function *function;

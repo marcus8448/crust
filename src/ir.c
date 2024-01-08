@@ -415,6 +415,7 @@ Instruction *instruction_jump_code(InstructionTable *table, const char *contents
                                    AstNodeList *actions) {
   Instruction *instruction = table_next(table);
   instruction->type = type;
+  instruction->processed = false;
   instruction->label = table_allocate_label(table);
 
   instructiontable_child(&instruction->instructions, table, -1);
@@ -642,9 +643,9 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
       instruction_jump(table, label);
     }
     int idx = instruction_label(table, label);
-    i->instructions.escape = i->escape = idx;
+    i->instructions.escape = idx;
     if (j != NULL)
-      j->instructions.escape = j->escape = idx;
+      j->instructions.escape = idx;
     return reference_direct(NULL);
   }
   case cf_while:
