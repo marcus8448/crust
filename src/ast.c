@@ -343,7 +343,9 @@ Result parse_value(const char *contents, const Token **token, VarList *globals, 
       node->arguments = malloc(sizeof(AstNode) * function->arguments.len);
       for (int i = 0; i < function->arguments.len; ++i) {
         *token = (*token)->next;
-        forward_err(parse_statement(contents, token, globals, functions, i == function->arguments.len - 1 ? token_closing_paren : token_comma, &node->arguments[i]));
+        forward_err(parse_statement(contents, token, globals, functions,
+                                    i == function->arguments.len - 1 ? token_closing_paren : token_comma,
+                                    &node->arguments[i]));
       }
       node->function = function;
       break;
@@ -400,9 +402,9 @@ Result parse_args(const char *contents, const Token **token, Function *function,
                   AstNode *inner) {
   if (function->arguments.len > 0) {
     for (int i = 0; i < function->arguments.len; ++i) {
-    *token = (*token)->next;
+      *token = (*token)->next;
       forward_err(parse_statement(contents, token, vars, functions,
-                      i == function->arguments.len - 1 ? token_closing_paren : token_comma, inner));
+                                  i == function->arguments.len - 1 ? token_closing_paren : token_comma, inner));
     }
   }
   return success();

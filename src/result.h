@@ -33,7 +33,7 @@ typedef struct {
   const char *reason;
 } Result;
 
-Result success();
+Result success(void);
 Result failure(const Token *at, const char *reason);
 
 bool successful(Result result);

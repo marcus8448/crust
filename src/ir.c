@@ -315,7 +315,7 @@ Reference instruction_ret(InstructionTable *table, const Reference value) {
   return value;
 }
 
-Reference instruction_call(InstructionTable *table, Function* function, Reference* arguments, const Reference output) {
+Reference instruction_call(InstructionTable *table, Function *function, Reference *arguments, const Reference output) {
   Instruction *instruction = table_next(table);
   instruction->type = CALL;
   instruction->arguments = arguments;
@@ -329,7 +329,8 @@ Reference instruction_call(InstructionTable *table, Function* function, Referenc
 
   for (int i = 0; i < instruction->function->arguments.len && i < 6; ++i) {
     assert(instruction->arguments[i].access <= 6);
-    if (isAllocated(instruction->arguments[i].access)) printf("%i: %i\n", instruction->arguments[i].allocation->index, instruction->arguments[i].access);
+    if (isAllocated(instruction->arguments[i].access))
+      printf("%i: %i\n", instruction->arguments[i].allocation->index, instruction->arguments[i].access);
   }
 
   return output;
@@ -444,8 +445,8 @@ Instruction *instruction_jump_code(InstructionTable *table, const char *contents
 }
 
 Instruction *instruction_jump_code_self(InstructionTable *table, const char *contents, VarList *globals,
-                                   FunctionList *functions, StrList *literals, InstructionType type, int label,
-                                   AstNodeList *actions) {
+                                        FunctionList *functions, StrList *literals, InstructionType type, int label,
+                                        AstNodeList *actions) {
   Instruction *instruction = table_next(table);
   instruction->type = type;
   instruction->processed = false;
@@ -474,10 +475,10 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   case op_array_index: {
     Reference array = solve_ast_node(contents, table, globals, functions, literals, node->left);
     char *str = format_str("%i", isAllocated(array.access) ? type_size(*array.allocation->type.inner) : 1);
-    Reference idx = instruction_basic_op(table, IMUL, (Reference) { .access = ConstantI, .value = str},
-                            solve_ast_node(contents, table, globals, functions, literals, node->right), "array index");
-    Reference out = instruction_basic_op(table, ADD, idx,
-                                array, "array index");
+    Reference idx =
+        instruction_basic_op(table, IMUL, (Reference){.access = ConstantI, .value = str},
+                             solve_ast_node(contents, table, globals, functions, literals, node->right), "array index");
+    Reference out = instruction_basic_op(table, ADD, idx, array, "array index");
     out.access = Dereference;
     return out;
   }
@@ -668,7 +669,8 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     for (int i = 0; i < node->function->arguments.len; ++i) {
       references[i] = solve_ast_node(contents, table, globals, functions, literals, &node->arguments[i]);
     }
-    return instruction_call(table, node->function, references, reference_direct(table_allocate(table, node->function->retVal)));
+    return instruction_call(table, node->function, references,
+                            reference_direct(table_allocate(table, node->function->retVal)));
   }
   case cf_if: {
     instruction_no_output(table, CMP, (Reference){.access = ConstantI, .value = strdup("0")},
@@ -694,7 +696,8 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     instruction_label(table, condLabel);
     instruction_no_output(table, CMP, (Reference){.access = ConstantI, .value = strdup("0")},
                           solve_ast_node(contents, table, globals, functions, literals, node->condition), NULL);
-    Instruction *i = instruction_jump_code(table, contents, globals, functions, literals, JNE, condLabel, node->actions);
+    Instruction *i =
+        instruction_jump_code(table, contents, globals, functions, literals, JNE, condLabel, node->actions);
 
     instruction_jump(table, escLabel);
     i->instructions.escape = instruction_label(table, escLabel);

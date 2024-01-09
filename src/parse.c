@@ -94,7 +94,9 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
         node->arguments = malloc(sizeof(AstNode) * function->arguments.len);
         for (int i = 0; i < function->arguments.len; ++i) {
           *token = (*token)->next;
-          forward_err(parse_statement(contents, token, globals, functions, i == function->arguments.len - 1 ? token_closing_paren : token_comma, &node->arguments[i]));
+          forward_err(parse_statement(contents, token, globals, functions,
+                                      i == function->arguments.len - 1 ? token_closing_paren : token_comma,
+                                      &node->arguments[i]));
         }
         node->function = function;
         *token = (*token)->next;
@@ -122,16 +124,17 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
         node->alternative = NULL;
       } else {
         *token = (*token)->next->next;
-        if ((*token)->type == token_opening_curly_brace) {
-          forward_err(parse_scope(contents, token, globals, functions, literals, node->alternative));
-        } else {
-          exit(48);
-          token_matches(*token, token_cf_if);
-          *token = (*token)->next;
-          forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, node->condition));
-          token_matches(*token, token_opening_curly_brace);
-          forward_err(parse_scope(contents, token, globals, functions, literals, node->alternative));
-        }
+        token_matches(*token, token_opening_curly_brace);
+        // if ((*token)->type == token_opening_curly_brace) {
+        forward_err(parse_scope(contents, token, globals, functions, literals, node->alternative));
+        // } else {
+        //   exit(48);
+        //   token_matches(*token, token_cf_if);
+        //   *token = (*token)->next;
+        //   forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace,
+        //   node->condition)); token_matches(*token, token_opening_curly_brace); forward_err(parse_scope(contents,
+        //   token, globals, functions, literals, node->alternative));
+        // }
       }
       break;
     }
@@ -168,45 +171,6 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
       return failure(*token, "expected start of statement");
     }
   }
-  exit(84);
-}
-
-Result invoke_function(const char *contents, const Token **token, InstructionTable *table, VarList *vars,
-                       FunctionList *function, Function file, FILE *output) {
-  token_matches(*token, token_opening_paren);
-  *token = (*token)->next;
-  // FIXME todo
-  //  for (int i = 0; i < registers->allocations.len; ++i) {
-  //    switch (ref_get_register(&frame->allocations.array[i])) {
-  //    case rax:
-  //    case rdi:
-  //    case rsi:
-  //    case rdx:
-  //    case rcx:
-  //    case r8:
-  //    case r9:
-  //    case r10:
-  //    case r11:
-  //      stackframe_moveto_stack(frame, &frame->allocations.array[i], file);
-  //      break;
-  //    default:
-  //      break;
-  //    }
-  //  }
-  //
-  //  for (int i = 0; i < function.arguments.len; i++) {
-  //    AstNode node;
-  //    forward_err(parse_statement(contents, token, globals, functions, token_closing_paren, &node));
-  //    if (i < 6) {
-  //    } else {
-  //    }
-  //
-  //    if (i + 1 == function.arguments.len) {
-  //      token_matches(*token, token_closing_paren);
-  //    } else {
-  //      token_matches(*token, token_comma);
-  //    }
-  //  }
-  //  fprintf(file, "call %s\n", function.name);
-  return success();
+  assert(false);
+  return failure(NULL, "assertion");
 }

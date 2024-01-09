@@ -12,7 +12,7 @@ typedef enum {
 typedef struct {
   LocationType location;
   union {
-    int offset;
+    int16_t offset;
     int8_t reg;
   };
 } Storage;
@@ -27,7 +27,7 @@ LIST_API(Storage, storage, Storage)
 
 typedef struct Registers {
   RegisterState registers[16];
-  int offset;
+  int16_t offset;
   Storage *storage;
   const struct Registers *parent;
 } Registers;

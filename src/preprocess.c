@@ -77,7 +77,7 @@ int add_str_literal(const char *contents, const Token *token, StrList *strLitera
 
 Result preprocess_globals(char *contents, const Token *token, StrList *strLiterals, VarList *variables,
                           FunctionList *functions, FILE *output) {
-  Token *base = token;
+  const Token *base = token;
   while (base != NULL) {
     if (base->type == token_string) {
       add_str_literal(contents, base, strLiterals, output);

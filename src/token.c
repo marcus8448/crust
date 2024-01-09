@@ -356,7 +356,8 @@ const char *token_name(const TokenType type) {
 }
 
 bool token_value_compare(const Token *token, const char *contents, const char *compare) {
-  if (compare == NULL) return false;
+  if (compare == NULL)
+    return false;
   contents += token->index;
   for (int i = 0; i < token->len; i++) {
     if (contents[i] != compare[i]) {
