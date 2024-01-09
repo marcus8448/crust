@@ -249,7 +249,7 @@ Reference instruction_mov(InstructionTable *table, const Reference from, Referen
   if (to.allocation->name != NULL && to.allocation->index >= table->parentCutoff) {
     printf("ref %i is dead\n", to.allocation->index);
     to.allocation =
-        table_allocate_variable(table, (Variable){.name = to.allocation->name, .type = to.allocation->type});
+        table_allocate_variable(table, (Variable){.name = strdup(to.allocation->name), .type = to.allocation->type});
     printf("variable %s%i\n", to.allocation->name, to.allocation->index);
   }
 
@@ -379,17 +379,11 @@ Reference instr_cmp_chk(InstructionTable *table, const InstructionType type, Ref
                         char *comment) {
 
   if (!isAllocated(right.access)) {
-    if (isAllocated(left.access)) {
-      const Reference temp = left;
-      left = right;
-      right = temp;
-    } else {
-      Allocation *allocation = table_allocate(table, (Type){.kind = i64, .inner = NULL});
-      instruction_mov(table, right, reference_direct(allocation), NULL);
-      right = reference_direct(allocation);
-    }
+    Allocation *allocation = table_allocate(table, (Type){.kind = i64, .inner = NULL});
+    instruction_mov(table, right, reference_direct(allocation), NULL);
+    right = reference_direct(allocation);
   }
-  instruction_no_output(table, CMP, left, right, NULL);
+  instruction_no_output(table, CMP, right, left, NULL);
 
   return instruction_sp_reg_read(table, type, comment);
 }
@@ -433,6 +427,29 @@ Instruction *instruction_jump_code(InstructionTable *table, const char *contents
   instruction->type = type;
   instruction->processed = false;
   instruction->label = table_allocate_label(table);
+
+  instructiontable_child(&instruction->instructions, table, -1);
+
+  printf("process label .LBL.%s.%i:\n", table->name, instruction->label);
+
+  instruction_label(&instruction->instructions, instruction->label);
+
+  for (int i = 0; i < actions->len; ++i) {
+    solve_ast_node(contents, &instruction->instructions, globals, functions, literals, &actions->array[i]);
+  }
+
+  instruction_jump(&instruction->instructions, label);
+  printf("end process label .LBL.%s.%i\n", table->name, instruction->label);
+  return instruction;
+}
+
+Instruction *instruction_jump_code_self(InstructionTable *table, const char *contents, VarList *globals,
+                                   FunctionList *functions, StrList *literals, InstructionType type, int label,
+                                   AstNodeList *actions) {
+  Instruction *instruction = table_next(table);
+  instruction->type = type;
+  instruction->processed = false;
+  instruction->label = label;
 
   instructiontable_child(&instruction->instructions, table, -1);
 
@@ -646,12 +663,13 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   }
   case op_value_let:
     return reference_direct(table_allocate_variable(table, node->variable));
-  case op_function:
+  case op_function: {
     Reference *references = malloc(sizeof(Reference) * (node->function->arguments.len + 1));
     for (int i = 0; i < node->function->arguments.len; ++i) {
       references[i] = solve_ast_node(contents, table, globals, functions, literals, &node->arguments[i]);
     }
     return instruction_call(table, node->function, references, reference_direct(table_allocate(table, node->function->retVal)));
+  }
   case cf_if: {
     instruction_no_output(table, CMP, (Reference){.access = ConstantI, .value = strdup("0")},
                           solve_ast_node(contents, table, globals, functions, literals, node->condition), NULL);
@@ -670,15 +688,16 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     return reference_direct(NULL);
   }
   case cf_while: {
-    int loopLabel = table_allocate_label(table);
     int escLabel = table_allocate_label(table);
+    int condLabel = table_allocate_label(table);
+    instruction_jump(table, condLabel);
+    instruction_label(table, condLabel);
     instruction_no_output(table, CMP, (Reference){.access = ConstantI, .value = strdup("0")},
                           solve_ast_node(contents, table, globals, functions, literals, node->condition), NULL);
-    Instruction *i = instruction_jump_code(table, contents, globals, functions, literals, JNE, loopLabel, node->actions);
+    Instruction *i = instruction_jump_code(table, contents, globals, functions, literals, JNE, condLabel, node->actions);
 
     instruction_jump(table, escLabel);
-    int idx = instruction_label(table, escLabel);
-    i->instructions.escape = idx;
+    i->instructions.escape = instruction_label(table, escLabel);
 
     return reference_direct(NULL);
   }

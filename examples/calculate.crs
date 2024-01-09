@@ -1,0 +1,44 @@
+extern fn puts(str: [u8]) -> i32;
+extern fn printf(fmt: [u8], num: i64, num2: i64, num3: i64) -> i32;
+extern fn scanf(fmt: [u8], out: [i64]) -> i32;
+extern fn strcmp(str1: [u8], str2: [u8]) -> i32;
+
+fn main(argc: i32, argv: [[u8]]) -> i64 {
+    puts("Enter a number: ");
+    let n: i64 = 0;
+    scanf("%lli", &n);
+    puts("Enter another number: ");
+    let m: i64 = 0;
+    scanf("%lli", &m);
+
+    puts("Enter an operation (MUL, ADD, OR, SUB, XOR, AND): ");
+    let op: [u8] = 0;
+    scanf("%s", &op);
+    if (strcmp(&op, "MUL") == 0) {
+        printf("%lli * %lli = %lli\n", n, m, n * m);
+        return 0;
+    }
+    if (strcmp(&op, "ADD") == 0) {
+        printf("%lli + %lli = %lli\n", n, m, n + m);
+        return 0;
+    }
+    if (strcmp(&op, "OR") == 0) {
+        printf("%lli | %lli = %lli\n", n, m, n | m);
+        return 0;
+    }
+    if (strcmp(&op, "SUB") == 0) {
+        printf("%lli - %lli = %lli\n", n, m, n - m);
+        return 0;
+    }
+    if (strcmp(&op, "XOR") == 0) {
+        printf("%lli ^ %lli = %lli\n", n, m, n ^ m);
+        return 0;
+    }
+    if (strcmp(&op, "AND") == 0) {
+        printf("%lli & %lli = %lli\n", n, m, n & m);
+        return 0;
+    }
+
+    puts("Unknown operation\n");
+    return 1;
+}

@@ -752,8 +752,8 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
         for (int j = 0; j < table->allocations.len; ++j) {
           Allocation *allocation = table->allocations.array[j];
           if (allocation->index < table->parentCutoff) {
-            Storage *old = registers_get_storage(registers->parent, allocation);
-            Storage *new = registers_get_storage(registers, allocation);
+            const Storage *old = registers_get_storage(registers->parent, allocation);
+            const Storage *new = registers_get_storage(registers, allocation);
             switch (old->location) {
             case L_Register: {
               assert(new->location != L_None);

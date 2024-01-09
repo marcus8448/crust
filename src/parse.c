@@ -147,7 +147,6 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
       forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, node->condition));
       token_matches(*token, token_opening_curly_brace);
       forward_err(parse_scope(contents, token, globals, functions, literals, node->actions));
-      *token = (*token)->next->next;
       break;
     }
     case token_cf_return: {

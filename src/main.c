@@ -54,6 +54,7 @@ int main(const int argc, char **argv) {
 
   for (int i = 1; i < argc; i++) {
     if (filedata_load(&files[i - 1], argv[i]) != 0) {
+      printf("No such file: %s\n", argv[i]);
       exit(-1);
     }
     strlist_init(&strLiterals[i - 1], 1);
@@ -61,6 +62,7 @@ int main(const int argc, char **argv) {
 
   for (int i = 0; i < argc - 1; i++) {
     if (!tokenize(files[i].contents, files[i].len, &tokens[i])) {
+      printf("Failed to tokenize %s\n", files[i].filename);
       exit(3);
     }
   }

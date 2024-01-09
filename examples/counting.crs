@@ -1,0 +1,15 @@
+extern fn puts(str: [u8]) -> i32;
+extern fn printf(fmt: [u8], num: i64) -> i32;
+extern fn scanf(fmt: [u8], num: [i64]) -> i32;
+
+fn main(argc: i32, argv: [[u8]]) -> i64 {
+    puts("Enter a number to count to: ");
+    let n: i64 = 0;
+    scanf("%lli", &n);
+    let i: i64 = 1;
+    while (i <= n) {
+        printf("%lli\n", i);
+        i = i + 1;
+    }
+    return 0;
+}

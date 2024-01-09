@@ -60,7 +60,7 @@ bool tokenize(const char *data, const size_t len, Token *head) {
     case any: {
       if (isspace(c) || c == '=' || c == ',' || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' ||
           c == '<' || c == '>' || c == '~' || c == '&' || c == '|' || c == '!' || c == '+' || c == '-' || c == '/' ||
-          c == '*' || c == ';' || c == '"' || c == ':' || c == '.') {
+          c == '*' || c == ';' || c == '"' || c == ':' || c == '.' || c == '^') {
         if (bufLen > 0) {
           if (sz_strncmp(buffer, "fn", bufLen) == 0) {
             token_push(&next, token_keyword_fn, i - bufLen, bufLen);
@@ -149,6 +149,8 @@ bool tokenize(const char *data, const size_t len, Token *head) {
           } else {
             token_push(&next, token_amperstand, i - bufLen, bufLen);
           }
+        } else if (c == '^') {
+          token_push(&next, token_caret, i - bufLen, bufLen);
         } else if (c == '|') {
           if (previous != NULL && previous->type == token_vertical_bar) {
             previous->type = token_double_vertical_bar;

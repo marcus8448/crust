@@ -25,6 +25,7 @@ add_executable(crust src/main.c
         src/result.h
         src/parse.c
         src/parse.h
+        src/util.c
 )
 
 get_target_property(SOURCE_FILES crust SOURCES)
