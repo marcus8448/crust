@@ -87,15 +87,14 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
         if (index == -1) {
           return failure(fn, "function not declared");
         }
-        const Function *function = &functions->array[index];
+        Function *function = &functions->array[index];
 
         AstNode *node = astnodelist_grow(nodes);
         node->type = op_function;
-        node->arguments = malloc(sizeof(AstNodeList));
-        astnodelist_init(node->arguments, function->arguments.len);
+        node->arguments = malloc(sizeof(AstNode) * function->arguments.len);
         for (int i = 0; i < function->arguments.len; ++i) {
           *token = (*token)->next;
-          forward_err(parse_statement(contents, token, globals, functions, i == function->arguments.len - 1 ? token_closing_paren : token_comma, astnodelist_grow(node->arguments)));
+          forward_err(parse_statement(contents, token, globals, functions, i == function->arguments.len - 1 ? token_closing_paren : token_comma, &node->arguments[i]));
         }
         node->function = function;
         *token = (*token)->next;
@@ -134,6 +133,21 @@ Result parse_scope(const char *contents, const Token **token, VarList *globals, 
           forward_err(parse_scope(contents, token, globals, functions, literals, node->alternative));
         }
       }
+      break;
+    }
+    case token_cf_while: {
+      AstNode *node = astnodelist_grow(nodes);
+      node->type = cf_while;
+      node->condition = malloc(sizeof(AstNode));
+      node->actions = malloc(sizeof(AstNodeList));
+
+      astnodelist_init(node->actions, 16);
+
+      *token = (*token)->next;
+      forward_err(parse_statement(contents, token, globals, functions, token_opening_curly_brace, node->condition));
+      token_matches(*token, token_opening_curly_brace);
+      forward_err(parse_scope(contents, token, globals, functions, literals, node->actions));
+      *token = (*token)->next->next;
       break;
     }
     case token_cf_return: {

@@ -212,7 +212,18 @@ Instruction *table_next(InstructionTable *table) {
   return instruction;
 }
 
+Allocation *table_get_allocation_by_token(InstructionTable *table, const char *contents, const Token *token) {
+  for (int i = 0; i < table->allocations.len; ++i) {
+    Allocation *alloc = table->allocations.array[i];
+    if (token_value_compare(token, contents, alloc->name)) {
+      return alloc;
+    }
+  }
+  return NULL;
+}
+
 void update_reference(const InstructionTable *table, const Instruction *instruction, const Reference reference) {
+  assert(reference.access <= 6);
   if (isAllocated(reference.access)) {
     printf("instr %i reads ref %i (%s)\n", instruction->id, reference.allocation->index,
            reference.allocation->name == NULL ? "null" : reference.allocation->name);
@@ -314,6 +325,11 @@ Reference instruction_call(InstructionTable *table, Function* function, Referenc
 
   for (int i = 0; i < function->arguments.len; i++) {
     update_reference(table, instruction, arguments[i]);
+  }
+
+  for (int i = 0; i < instruction->function->arguments.len && i < 6; ++i) {
+    assert(instruction->arguments[i].access <= 6);
+    if (isAllocated(instruction->arguments[i].access)) printf("%i: %i\n", instruction->arguments[i].allocation->index, instruction->arguments[i].access);
   }
 
   return output;
@@ -439,9 +455,14 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   case op_nop:
     exit(112);
   case op_array_index: {
-    Reference index = ast_basic_op(ADD, contents, table, globals, functions, literals, node, "array index");
-    index.access = Dereference;
-    return index;
+    Reference array = solve_ast_node(contents, table, globals, functions, literals, node->left);
+    char *str = format_str("%i", isAllocated(array.access) ? type_size(*array.allocation->type.inner) : 1);
+    Reference idx = instruction_basic_op(table, IMUL, (Reference) { .access = ConstantI, .value = str},
+                            solve_ast_node(contents, table, globals, functions, literals, node->right), "array index");
+    Reference out = instruction_basic_op(table, ADD, idx,
+                                array, "array index");
+    out.access = Dereference;
+    return out;
   }
   case op_comma: {
     // discard left, keep right
@@ -626,9 +647,9 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   case op_value_let:
     return reference_direct(table_allocate_variable(table, node->variable));
   case op_function:
-    Reference *references = malloc(sizeof(Reference) * node->arguments->len);
-    for (int i = 0; i < node->arguments->len; ++i) {
-      references[i] = solve_ast_node(contents, table, globals, functions, literals, &node->arguments->array[i]);
+    Reference *references = malloc(sizeof(Reference) * (node->function->arguments.len + 1));
+    for (int i = 0; i < node->function->arguments.len; ++i) {
+      references[i] = solve_ast_node(contents, table, globals, functions, literals, &node->arguments[i]);
     }
     return instruction_call(table, node->function, references, reference_direct(table_allocate(table, node->function->retVal)));
   case cf_if: {
@@ -648,8 +669,19 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
       j->instructions.escape = idx;
     return reference_direct(NULL);
   }
-  case cf_while:
-    break;
+  case cf_while: {
+    int loopLabel = table_allocate_label(table);
+    int escLabel = table_allocate_label(table);
+    instruction_no_output(table, CMP, (Reference){.access = ConstantI, .value = strdup("0")},
+                          solve_ast_node(contents, table, globals, functions, literals, node->condition), NULL);
+    Instruction *i = instruction_jump_code(table, contents, globals, functions, literals, JNE, loopLabel, node->actions);
+
+    instruction_jump(table, escLabel);
+    int idx = instruction_label(table, escLabel);
+    i->instructions.escape = idx;
+
+    return reference_direct(NULL);
+  }
   case cf_return: {
     return instruction_ret(table, solve_ast_node(contents, table, globals, functions, literals, node->inner));
   }

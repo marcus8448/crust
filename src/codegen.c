@@ -497,6 +497,7 @@ void registers_move_into_stack(Registers *registers, Allocation *allocation, int
 
 int push_function_arguments(const InstructionTable *table, Registers *registers, Instruction *instruction, FILE *output) {
   for (int i = 0; i < instruction->function->arguments.len && i < 6; ++i) {
+    assert(instruction->arguments[i].access <= 6);
     registers_move_into_register_tmp(table, registers, instruction->function->arguments.array[i].type, instruction->arguments[i], argumentRegisters[i], output);
   }
 
@@ -570,9 +571,9 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       cmp_output("setge", registers, instruction, output);
       break;
     case CALL: {
-      if (instruction->function->retVal.kind != 0 && instruction->retVal.allocation->lastInstr != -1) {
-        clear_register(table, registers, rax, output);
-      }
+      clear_register(table, registers, rax, output);
+      fputs("\tmovq $0, %rax\n", output);
+      fputs("\tmovq $0, %rax\n", stdout);
 
       int offset = push_function_arguments(table, registers, instruction, output);
 

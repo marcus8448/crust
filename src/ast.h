@@ -139,7 +139,7 @@ typedef struct AstNode {
     // function call
     struct {
       Function *function;
-      AstNodeList *arguments;
+      struct AstNode *arguments;
     };
 
     struct {

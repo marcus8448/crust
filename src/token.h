@@ -63,6 +63,7 @@ typedef enum {
 
   token_cf_if,
   token_cf_else,
+  token_cf_while,
   token_cf_return,
   token_cf_break
 } TokenType;

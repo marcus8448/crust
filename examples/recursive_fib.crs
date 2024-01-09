@@ -1,0 +1,20 @@
+extern fn puts(str: [u8]) -> i32;
+extern fn printf(fmt: [u8], num: i64, num2: i64) -> i32;
+extern fn strtol(str: [u8], endptr: [[u8]], base: i32) -> i32;
+
+fn main(argc: i32, argv: [[u8]]) -> i64 {
+    if (argc < 2) {
+        puts("Usage: fib <num>");
+        return 1;
+    }
+    let n: i64 = strtol(argv[1], 0, 10) as i64;
+    printf("fib(%lli) = %lli\n", n, fib(n));
+    return 0;
+}
+
+fn fib(n: i64) -> i64 {
+    if n < 2 {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}

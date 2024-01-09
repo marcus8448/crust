@@ -72,6 +72,8 @@ bool tokenize(const char *data, const size_t len, Token *head) {
             token_push(&next, token_keyword_as, i - bufLen, bufLen);
           } else if (sz_strncmp(buffer, "if", bufLen) == 0) {
             token_push(&next, token_cf_if, i - bufLen, bufLen);
+          } else if (sz_strncmp(buffer, "while", bufLen) == 0) {
+            token_push(&next, token_cf_while, i - bufLen, bufLen);
           } else if (sz_strncmp(buffer, "return", bufLen) == 0) {
             token_push(&next, token_cf_return, i - bufLen, bufLen);
           } else if (sz_strncmp(buffer, "break", bufLen) == 0) {
@@ -335,6 +337,8 @@ const char *token_name(const TokenType type) {
     return "if";
   case token_cf_else:
     return "else";
+  case token_cf_while:
+    return "while";
   case token_cf_return:
     return "return";
   case token_cf_break:
@@ -350,6 +354,7 @@ const char *token_name(const TokenType type) {
 }
 
 bool token_value_compare(const Token *token, const char *contents, const char *compare) {
+  if (compare == NULL) return false;
   contents += token->index;
   for (int i = 0; i < token->len; i++) {
     if (contents[i] != compare[i]) {

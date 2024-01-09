@@ -151,6 +151,7 @@ Allocation *table_allocate_register(InstructionTable *table, Type type);
 Allocation *table_allocate_stack(InstructionTable *table, Type type);
 
 Instruction *table_next(InstructionTable *table);
+Allocation *table_get_allocation_by_token(InstructionTable *table, const char* contents, const Token *token);
 
 Type ref_infer_type(Reference a, Reference b);
 
