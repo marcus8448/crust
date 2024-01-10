@@ -11,7 +11,7 @@ fn main(argc: i32, argv: [[u8]]) -> i64 {
     let m: i64 = 0;
     scanf("%lli", &m);
 
-    puts("Enter an operation (MUL, ADD, OR, SUB, XOR, AND): ");
+    puts("Enter an operation (MUL, ADD, OR, SUB, DIV, MOD, XOR, AND): ");
     let op: [u8] = 0;
     scanf("%s", &op);
     if (strcmp(&op, "MUL") == 0) {
@@ -36,6 +36,14 @@ fn main(argc: i32, argv: [[u8]]) -> i64 {
     }
     if (strcmp(&op, "AND") == 0) {
         printf("%lli & %lli = %lli\n", n, m, n & m);
+        return 0;
+    }
+    if (strcmp(&op, "DIV") == 0) {
+        printf("%lli / %lli = %lli\n", n, m, n / m);
+        return 0;
+    }
+    if (strcmp(&op, "MOD") == 0) {
+        printf("%lli %% %lli = %lli\n", n, m, n % m);
         return 0;
     }
 

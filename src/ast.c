@@ -206,6 +206,9 @@ Result parse_statement(const char *contents, const Token **token, VarList *globa
     case token_slash:
       nxt->type = op_divide;
       break;
+    case token_percent:
+      nxt->type = op_modulo;
+      break;
     case token_vertical_bar:
       nxt->type = op_bitwise_or;
       break;

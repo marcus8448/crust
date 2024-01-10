@@ -293,6 +293,23 @@ Reference instruction_basic_op(InstructionTable *table, const InstructionType ty
   return output;
 }
 
+Reference instruction_sp_out_op(InstructionTable *table, const InstructionType type, const Reference a,
+                               const Reference b, char *comment) {
+  const Reference output = reference_direct(table_allocate_infer_types(table, a, b));
+
+  Instruction *instruction = table_next(table);
+  instruction->type = type;
+  instruction->inputs[0] = a;
+  instruction->inputs[1] = b;
+  instruction->output = output;
+  instruction->comment = comment;
+
+  update_reference(table, instruction, a);
+  update_reference(table, instruction, b);
+  update_reference_out(instruction, output);
+  return output;
+}
+
 void instruction_no_output(InstructionTable *table, const InstructionType type, const Reference a, const Reference b,
                            char *comment) {
   Instruction *instruction = table_next(table);
@@ -367,6 +384,13 @@ Allocation *table_get_variable_by_token(const InstructionTable *table, const cha
 Reference ast_basic_op(const InstructionType type, const char *contents, InstructionTable *table, VarList *globals,
                        FunctionList *functions, StrList *literals, const AstNode *node, char *comment) {
   return instruction_basic_op(table, type, solve_ast_node(contents, table, globals, functions, literals, node->left),
+                              solve_ast_node(contents, table, globals, functions, literals, node->right), comment);
+}
+
+
+Reference ast_sp_out_op(const InstructionType type, const char *contents, InstructionTable *table, VarList *globals,
+                       FunctionList *functions, StrList *literals, const AstNode *node, char *comment) {
+  return instruction_sp_out_op(table, type, solve_ast_node(contents, table, globals, functions, literals, node->left),
                               solve_ast_node(contents, table, globals, functions, literals, node->right), comment);
 }
 
@@ -551,12 +575,12 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
   case op_multiply: {
     return ast_basic_op(IMUL, contents, table, globals, functions, literals, node, "mul");
   }
-  case op_divide:
-    // fixme div is not simple
-    break;
-  case op_modulo:
-    // fixme div is not simple
-    break;
+  case op_divide: {
+    return ast_sp_out_op(IDIV, contents, table, globals, functions, literals, node, "div");
+  }
+  case op_modulo: {
+    return ast_sp_out_op(IDIV_mod, contents, table, globals, functions, literals, node, "mod");
+  }
   case op_bitwise_or: {
     return ast_basic_op(OR, contents, table, globals, functions, literals, node, "bitwise or");
   }

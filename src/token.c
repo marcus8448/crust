@@ -60,7 +60,7 @@ bool tokenize(const char *data, const size_t len, Token *head) {
     case any: {
       if (isspace(c) || c == '=' || c == ',' || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' ||
           c == '<' || c == '>' || c == '~' || c == '&' || c == '|' || c == '!' || c == '+' || c == '-' || c == '/' ||
-          c == '*' || c == ';' || c == '"' || c == ':' || c == '.' || c == '^') {
+          c == '*' || c == ';' || c == '"' || c == ':' || c == '.' || c == '^' || c == '%') {
         if (bufLen > 0) {
           if (sz_strncmp(buffer, "fn", bufLen) == 0) {
             token_push(&next, token_keyword_fn, i - bufLen, bufLen);
@@ -128,6 +128,8 @@ bool tokenize(const char *data, const size_t len, Token *head) {
           token_push(&next, token_plus, i - bufLen, bufLen);
         } else if (c == '-') {
           token_push(&next, token_minus, i - bufLen, bufLen);
+        } else if (c == '%') {
+          token_push(&next, token_percent, i - bufLen, bufLen);
         } else if (c == '/') {
           if (previous != NULL && previous->type == token_slash) {
             next = previous;
@@ -287,6 +289,8 @@ const char *token_name(const TokenType type) {
     return "*";
   case token_slash:
     return "/";
+  case token_percent:
+    return "%";
   case token_vertical_bar:
     return "|";
   case token_caret:

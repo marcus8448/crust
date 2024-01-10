@@ -21,6 +21,7 @@ typedef enum {
   token_minus = '-',
   token_asterik = '*',
   token_slash = '/',
+  token_percent = '%',
 
   token_vertical_bar = '|',
   token_caret = '^',

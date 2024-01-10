@@ -85,6 +85,8 @@ typedef enum {
   ADD,
   SUB,
   IMUL,
+  IDIV,
+  IDIV_mod,
   OR,
   XOR,
   AND,

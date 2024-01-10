@@ -68,19 +68,37 @@ void write_binary_transform_op(const Registers *registers, const char *op, const
 }
 
 void write_cmp_op(const Registers *registers, const char *op, const Reference a, const Reference b, FILE *output) {
-  if ((isAllocated(a.access) && a.allocation->name != NULL) || (isAllocated(b.access) && b.allocation->name != NULL)) {
-    fprintf(output, "\t%s%c %s, %s # %s, %s\n", op, mnemonic_suffix(type_width(ref_infer_type(a, b))),
-            registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b),
-            isAllocated(a.access) ? a.allocation->name : "<tmp>", isAllocated(b.access) ? b.allocation->name : "<tmp>");
-    fprintf(stdout, "\t%s%c %s, %s # %s, %s\n", op, mnemonic_suffix(type_width(ref_infer_type(a, b))),
-            registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b),
-            isAllocated(a.access) ? a.allocation->name : "<tmp>", isAllocated(b.access) ? b.allocation->name : "<tmp>");
-    return;
+  Type type = ref_infer_type(a, b);
+  Type aType;
+  Type bType;
+  if (isAllocated(a.access)) {
+    aType = a.allocation->type;
+    a.allocation->type = type;
   }
-  fprintf(output, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(ref_infer_type(a, b))),
-          registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
-  fprintf(stdout, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(ref_infer_type(a, b))),
-          registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
+  if (isAllocated(b.access)) {
+    bType = b.allocation->type;
+    b.allocation->type = type;
+  }
+  if ((isAllocated(a.access) && a.allocation->name != NULL) || (isAllocated(b.access) && b.allocation->name != NULL)) {
+    fprintf(output, "\t%s%c %s, %s # %s, %s\n", op, mnemonic_suffix(type_width(type)),
+            registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b),
+            isAllocated(a.access) ? a.allocation->name : "<tmp>", isAllocated(b.access) ? b.allocation->name : "<tmp>");
+    fprintf(stdout, "\t%s%c %s, %s # %s, %s\n", op, mnemonic_suffix(type_width(type)),
+            registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b),
+            isAllocated(a.access) ? a.allocation->name : "<tmp>", isAllocated(b.access) ? b.allocation->name : "<tmp>");
+  } else {
+    fprintf(output, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(type)),
+            registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
+    fprintf(stdout, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(type)),
+            registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
+  }
+
+  if (isAllocated(a.access)) {
+    a.allocation->type = aType;
+  }
+  if (isAllocated(b.access)) {
+    b.allocation->type = bType;
+  }
 }
 
 void write_ternary_op(const Registers *registers, const char *op, const Width width, const Reference a,
@@ -549,6 +567,11 @@ int16_t push_function_arguments(const InstructionTable *table, Registers *regist
   return base;
 }
 
+void write_op_no_args(Registers * registers, char * str, FILE * file) {
+  fprintf(stdout, "\t%s\n", str);
+  fprintf(file, "\t%s\n", str);
+}
+
 void generate_statement(Registers *registers, const char *contents, InstructionTable *table, VarList *globals,
                         FunctionList *functions, StrList *literals, FILE *output) {
   for (int i = 0; i < table->allocations.len; ++i) {
@@ -683,6 +706,30 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       write_binary_op(registers, "imul", type_width(instruction->output.allocation->type), instruction->inputs[0],
                       instruction->output, output);
       cullref(registers, instruction, instruction->inputs[0]);
+      break;
+    case IDIV:
+      clear_register(table, registers, rax, output);
+      clear_register(table, registers, rdx, output);
+
+      registers_move_into_register_tmp(table, registers, instruction->inputs[0].allocation->type, instruction->inputs[0], rax, output);
+      write_op_no_args(registers, "cqto", output);
+
+      write_unary_op(registers, "idiv", type_width(instruction->inputs[0].allocation->type), instruction->inputs[1], output);
+      registers_claim_register(registers, instruction->output.allocation, rax);
+      cullref(registers, instruction, instruction->inputs[0]);
+      cullref(registers, instruction, instruction->inputs[1]);
+      break;
+    case IDIV_mod:
+      clear_register(table, registers, rax, output);
+      clear_register(table, registers, rdx, output);
+
+      registers_move_into_register_tmp(table, registers, instruction->inputs[0].allocation->type, instruction->inputs[0], rax, output);
+      write_op_no_args(registers, "cqto", output);
+
+      write_unary_op(registers, "idiv", type_width(instruction->inputs[0].allocation->type), instruction->inputs[1], output);
+      registers_claim_register(registers, instruction->output.allocation, rdx);
+      cullref(registers, instruction, instruction->inputs[0]);
+      cullref(registers, instruction, instruction->inputs[1]);
       break;
     case OR:
       write_binary_op(registers, "or", type_width(instruction->output.allocation->type), instruction->inputs[0],
