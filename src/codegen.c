@@ -579,10 +579,9 @@ int16_t push_function_arguments(const InstructionTable *table, Registers *regist
                          instruction->arguments[i], offset, output);
   }
 
-  if (base != 0) {
-    fprintf(output, "\tsubq $%i, %%rsp\n", (-base / 16 + 1) * 16 + 8);
-    fprintf(stdout, "\tsubq $%i, %%rsp\n", (-base / 16 + 1) * 16 + 8);
-  }
+  fprintf(output, "\tsubq $%i, %%rsp\n", (-base / 16 + 1) * 16 + 8);
+  fprintf(stdout, "\tsubq $%i, %%rsp\n", (-base / 16 + 1) * 16 + 8);
+
   return base;
 }
 
