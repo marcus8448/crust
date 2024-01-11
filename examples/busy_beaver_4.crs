@@ -1,16 +1,12 @@
-extern fn putchar(c: i8) -> i32;
-extern fn puts(c: [i8]) -> i32;
-extern fn malloc(c: i64) -> [i8];
 extern fn calloc(c: i64, s: i64) -> [i8];
 extern fn realloc(ptr: [i8], c: i64) -> [i8];
 extern fn memcpy(dest: [i8], src: [i8], len: i64);
-extern fn free(ptr: [i8]);
 extern fn memset(ptr: [i8], value: i8, num: i64);
 extern fn printf(fmt: [u8], num: i32) -> i32;
 
 fn main(argc: i32) -> i64 {
     let x: i64 = test(calloc(256, 1), 256, 128, 0, 0);
-    printf("x: %lli\n", x);
+    printf("busy beaver 4: %lli\n", x);
     return 0;
 }
 

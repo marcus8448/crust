@@ -18,14 +18,12 @@ add_executable(crust src/main.c
         src/types.h
         src/ir.c
         src/ir.h
-        src/util.h
         src/codegen.h
         src/codegen.c
         src/result.c
         src/result.h
         src/parse.c
         src/parse.h
-        src/util.c
 )
 
 get_target_property(SOURCE_FILES crust SOURCES)

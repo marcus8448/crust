@@ -1,7 +1,8 @@
 #include "ir.h"
 
 #include "register.h"
-#include "util.h"
+
+#include <stdio.h>
 #include <string.h>
 
 int nextInstrId = 0;
@@ -455,7 +456,7 @@ Instruction *instruction_jump_code(InstructionTable *table, const char *contents
 
   instructiontable_child(&instruction->instructions, table, -1);
 
-  printf("process label .LBL.%s.%i:\n", table->name, instruction->label);
+  printf("JC process label .LBL.%s.%i:\n", table->name, instruction->label);
 
   instruction_label(&instruction->instructions, instruction->label);
 
@@ -464,7 +465,7 @@ Instruction *instruction_jump_code(InstructionTable *table, const char *contents
   }
 
   instruction_jump(&instruction->instructions, label);
-  printf("end process label .LBL.%s.%i\n", table->name, instruction->label);
+  printf("JC end process label .LBL.%s.%i\n", table->name, instruction->label);
   return instruction;
 }
 
@@ -478,7 +479,7 @@ Instruction *instruction_jump_code_self(InstructionTable *table, const char *con
 
   instructiontable_child(&instruction->instructions, table, -1);
 
-  printf("process label .LBL.%s.%i:\n", table->name, instruction->label);
+  printf("JCS process label .LBL.%s.%i:\n", table->name, instruction->label);
 
   instruction_label(&instruction->instructions, instruction->label);
 
@@ -487,7 +488,7 @@ Instruction *instruction_jump_code_self(InstructionTable *table, const char *con
   }
 
   instruction_jump(&instruction->instructions, label);
-  printf("end process label .LBL.%s.%i\n", table->name, instruction->label);
+  printf("JCS end process label .LBL.%s.%i\n", table->name, instruction->label);
   return instruction;
 }
 
@@ -498,7 +499,12 @@ Reference solve_ast_node(const char *contents, InstructionTable *table, VarList 
     exit(112);
   case op_array_index: {
     Reference array = solve_ast_node(contents, table, globals, functions, literals, node->left);
-    char *str = format_str("%i", isAllocated(array.access) ? type_size(*array.allocation->type.inner) : 1);
+    int dz = isAllocated(array.access) ? type_size(*array.allocation->type.inner) : 1;
+    int n = snprintf(NULL, 0, "%i", dz);
+    char *str = malloc(n + 2);
+    snprintf(str, n + 1, "%i", dz);
+    str[n + 1] = '\0';
+
     Reference idx =
         instruction_basic_op(table, IMUL, (Reference){.access = ConstantI, .value = str},
                              solve_ast_node(contents, table, globals, functions, literals, node->right), "array index");
