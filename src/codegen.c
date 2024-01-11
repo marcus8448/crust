@@ -127,9 +127,8 @@ void registers_move_into_register_tmp(const InstructionTable *table, Registers *
     clear_register(table, registers, reg, output);
 
     registers_move_into_register_tmp(table, registers, type, ref, reg, output);
-             }
+  }
 }
-
 
 void write_cmp_op(const Registers *registers, const char *op, const Reference a, const Reference b, FILE *output) {
   Type type = ref_infer_type(a, b);
@@ -151,10 +150,10 @@ void write_cmp_op(const Registers *registers, const char *op, const Reference a,
             registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b),
             isAllocated(a.access) ? a.allocation->name : "<tmp>", isAllocated(b.access) ? b.allocation->name : "<tmp>");
   } else {
-    fprintf(output, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(type)),
-            registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
-    fprintf(stdout, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(type)),
-            registers_get_mnemonic(registers, a), registers_get_mnemonic(registers, b));
+    fprintf(output, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(type)), registers_get_mnemonic(registers, a),
+            registers_get_mnemonic(registers, b));
+    fprintf(stdout, "\t%s%c %s, %s\n", op, mnemonic_suffix(type_width(type)), registers_get_mnemonic(registers, a),
+            registers_get_mnemonic(registers, b));
   }
 
   if (isAllocated(a.access)) {
@@ -587,7 +586,7 @@ int16_t push_function_arguments(const InstructionTable *table, Registers *regist
   return base;
 }
 
-void write_op_no_args(Registers * registers, char * str, FILE * file) {
+void write_op_no_args(Registers *registers, char *str, FILE *file) {
   fprintf(stdout, "\t%s\n", str);
   fprintf(file, "\t%s\n", str);
 }
@@ -673,7 +672,8 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
         break;
       }
       if (isAllocated(from.access) && from.access == Direct && from.allocation->lastInstr == instruction->id &&
-          to.allocation->index >= table->parentCutoff && type_width(to.allocation->type) == type_width(from.allocation->type)) {
+          to.allocation->index >= table->parentCutoff &&
+          type_width(to.allocation->type) == type_width(from.allocation->type)) {
         registers_override(registers, to.allocation, from.allocation);
         printf("Inlined MOV from %i (%s) to %i (%s)\n", from.allocation->index,
                from.allocation->name != NULL ? from.allocation->name : "null", to.allocation->index,
@@ -731,10 +731,12 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       clear_register(table, registers, rax, output);
       clear_register(table, registers, rdx, output);
 
-      registers_move_into_register_tmp(table, registers, instruction->inputs[0].allocation->type, instruction->inputs[0], rax, output);
+      registers_move_into_register_tmp(table, registers, instruction->inputs[0].allocation->type,
+                                       instruction->inputs[0], rax, output);
       write_op_no_args(registers, "cqto", output);
 
-      write_unary_op(registers, "idiv", type_width(instruction->inputs[0].allocation->type), instruction->inputs[1], output);
+      write_unary_op(registers, "idiv", type_width(instruction->inputs[0].allocation->type), instruction->inputs[1],
+                     output);
       registers_claim_register(registers, instruction->output.allocation, rax);
       cullref(registers, instruction, instruction->inputs[0]);
       cullref(registers, instruction, instruction->inputs[1]);
@@ -743,10 +745,12 @@ void generate_statement(Registers *registers, const char *contents, InstructionT
       clear_register(table, registers, rax, output);
       clear_register(table, registers, rdx, output);
 
-      registers_move_into_register_tmp(table, registers, instruction->inputs[0].allocation->type, instruction->inputs[0], rax, output);
+      registers_move_into_register_tmp(table, registers, instruction->inputs[0].allocation->type,
+                                       instruction->inputs[0], rax, output);
       write_op_no_args(registers, "cqto", output);
 
-      write_unary_op(registers, "idiv", type_width(instruction->inputs[0].allocation->type), instruction->inputs[1], output);
+      write_unary_op(registers, "idiv", type_width(instruction->inputs[0].allocation->type), instruction->inputs[1],
+                     output);
       registers_claim_register(registers, instruction->output.allocation, rdx);
       cullref(registers, instruction, instruction->inputs[0]);
       cullref(registers, instruction, instruction->inputs[1]);

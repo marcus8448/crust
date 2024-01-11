@@ -295,7 +295,7 @@ Reference instruction_basic_op(InstructionTable *table, const InstructionType ty
 }
 
 Reference instruction_sp_out_op(InstructionTable *table, const InstructionType type, const Reference a,
-                               const Reference b, char *comment) {
+                                const Reference b, char *comment) {
   const Reference output = reference_direct(table_allocate_infer_types(table, a, b));
 
   Instruction *instruction = table_next(table);
@@ -388,11 +388,10 @@ Reference ast_basic_op(const InstructionType type, const char *contents, Instruc
                               solve_ast_node(contents, table, globals, functions, literals, node->right), comment);
 }
 
-
 Reference ast_sp_out_op(const InstructionType type, const char *contents, InstructionTable *table, VarList *globals,
-                       FunctionList *functions, StrList *literals, const AstNode *node, char *comment) {
+                        FunctionList *functions, StrList *literals, const AstNode *node, char *comment) {
   return instruction_sp_out_op(table, type, solve_ast_node(contents, table, globals, functions, literals, node->left),
-                              solve_ast_node(contents, table, globals, functions, literals, node->right), comment);
+                               solve_ast_node(contents, table, globals, functions, literals, node->right), comment);
 }
 
 Reference instr_test_self(InstructionTable *table, const InstructionType type, const Reference ref, char *comment) {
